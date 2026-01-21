@@ -1,0 +1,453 @@
+{
+  "metrics": {
+    "quantitative": {
+      "total_questions": 17,
+      "total_attempted": 17,
+      "total_solved": 14,
+      "total_errors": 3
+    },
+    "qualitative": {
+      "mastered_topics": [
+        {
+          "topic": "Absolute Value Differentiation",
+          "evidence": {
+            "questions_tested": [
+              3
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q3: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Derivative of Inverse Trigonometric Functions",
+          "evidence": {
+            "questions_tested": [
+              6
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q6: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Exponential Functions",
+          "evidence": {
+            "questions_tested": [
+              13,
+              14
+            ],
+            "performance": "2/2 solved",
+            "details": [
+              "Q13: Solved",
+              "Q14: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Extreme Value Theorem",
+          "evidence": {
+            "questions_tested": [
+              8
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q8: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Limits at Infinity",
+          "evidence": {
+            "questions_tested": [
+              1,
+              14
+            ],
+            "performance": "2/2 solved",
+            "details": [
+              "Q1: Solved",
+              "Q14: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Logarithmic Differentiation",
+          "evidence": {
+            "questions_tested": [
+              5
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q5: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Logarithmic Functions",
+          "evidence": {
+            "questions_tested": [
+              11,
+              12
+            ],
+            "performance": "2/2 solved",
+            "details": [
+              "Q11: Solved",
+              "Q12: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Product Rule",
+          "evidence": {
+            "questions_tested": [
+              4
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q4: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Quotient Rule",
+          "evidence": {
+            "questions_tested": [
+              7
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q7: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Trigonometric Functions",
+          "evidence": {
+            "questions_tested": [
+              10,
+              11,
+              12
+            ],
+            "performance": "3/3 solved",
+            "details": [
+              "Q10: Solved",
+              "Q11: Solved",
+              "Q12: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        }
+      ],
+      "needs_practice_topics": [
+        {
+          "topic": "Absolute Extrema",
+          "evidence": {
+            "questions_tested": [
+              17,
+              18,
+              19
+            ],
+            "performance": "2/3 solved",
+            "details": [
+              "Q17: Solved",
+              "Q18: Attempted (Incomplete)",
+              "Q19: Solved"
+            ],
+            "reason": "1 question(s) attempted but not solved"
+          }
+        },
+        {
+          "topic": "Critical Numbers",
+          "evidence": {
+            "questions_tested": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              9,
+              17,
+              18,
+              19
+            ],
+            "performance": "7/9 solved",
+            "details": [
+              "Q3: Solved",
+              "Q4: Solved",
+              "Q5: Solved",
+              "Q6: Solved",
+              "Q7: Solved",
+              "Q9: Attempted (Conceptual)",
+              "Q17: Solved",
+              "Q18: Attempted (Incomplete)",
+              "Q19: Solved"
+            ],
+            "reason": "2 question(s) attempted but not solved"
+          }
+        },
+        {
+          "topic": "First Derivative Test",
+          "evidence": {
+            "questions_tested": [
+              9
+            ],
+            "performance": "0/1 solved",
+            "details": [
+              "Q9: Attempted (Conceptual)"
+            ],
+            "reason": "1 question(s) attempted but not solved"
+          }
+        },
+        {
+          "topic": "Limits",
+          "evidence": {
+            "questions_tested": [
+              2,
+              10,
+              11,
+              12,
+              13
+            ],
+            "performance": "4/5 solved",
+            "details": [
+              "Q2: Attempted (Conceptual)",
+              "Q10: Solved",
+              "Q11: Solved",
+              "Q12: Solved",
+              "Q13: Solved"
+            ],
+            "reason": "1 question(s) attempted but not solved"
+          }
+        }
+      ]
+    },
+    "methodology": {
+      "description": "Analysis based on hw4/metrics_definitions.md",
+      "mastered_criteria": "All questions for this topic were attempted AND all were solved correctly",
+      "needs_practice_criteria": "Not all questions attempted OR not all solved correctly",
+      "visual_questions_excluded": "Questions 12 and 13 (visual/image-based) were excluded from analysis"
+    }
+  },
+  "practice_problems": [
+    {
+      "problem_number": 1,
+      "topic": "Limits",
+      "question": "Evaluate $\\lim_{x\\to\\infty} \\frac{5x^2 + 3x}{2x^2 + 7x + 1}.$",
+      "hint": "Divide numerator and denominator by the highest power of $x$ in the denominator.",
+      "answer": "The limit is $\\frac{5}{2}$."
+    },
+    {
+      "problem_number": 2,
+      "topic": "Limits",
+      "question": "Evaluate $\\lim_{x\\to 2} \\frac{x^3 - 8}{x^2 - 4}.$",
+      "hint": "Factorize both numerator and denominator to simplify the expression.",
+      "answer": "The limit is $6$."
+    },
+    {
+      "problem_number": 3,
+      "topic": "Critical Numbers",
+      "question": "Find all critical numbers for the function $f(x) = x^3 - 3x^2 + 2x.$",
+      "hint": "Find $f'(x)$ and solve $f'(x) = 0$ to locate critical numbers.",
+      "answer": "The critical numbers are $x = 0$, $x = 1$, and $x = 2$."
+    },
+    {
+      "problem_number": 4,
+      "topic": "First Derivative Test",
+      "question": "Use the First Derivative Test to determine the local extrema of $f(x) = x^3 - 3x^2 + 2x.$",
+      "hint": "Analyze the sign of $f'(x)$ around the critical numbers.",
+      "answer": "Local maximum at $x = 1$, local minimum at $x = 2$."
+    },
+    {
+      "problem_number": 5,
+      "topic": "Absolute Extrema",
+      "question": "Find the absolute extrema of $f(x) = x^2 - 4x$ on the interval $[0, 5].$",
+      "hint": "Evaluate $f(x)$ at the critical numbers and endpoints of the interval.",
+      "answer": "Absolute minimum at $x = 2$ ($f(2) = -4$), absolute maximum at $x = 5$ ($f(5) = 5$)."
+    }
+  ],
+  "details": {
+    "topic_mapping": {
+      "1": [
+        "Limits at Infinity"
+      ],
+      "2": [
+        "Limits"
+      ],
+      "3": [
+        "Critical Numbers",
+        "Absolute Value Differentiation"
+      ],
+      "4": [
+        "Critical Numbers",
+        "Product Rule"
+      ],
+      "5": [
+        "Critical Numbers",
+        "Logarithmic Differentiation"
+      ],
+      "6": [
+        "Critical Numbers",
+        "Derivative of Inverse Trigonometric Functions"
+      ],
+      "7": [
+        "Critical Numbers",
+        "Quotient Rule"
+      ],
+      "8": [
+        "Extreme Value Theorem"
+      ],
+      "9": [
+        "Critical Numbers",
+        "First Derivative Test"
+      ],
+      "10": [
+        "Limits",
+        "Trigonometric Functions"
+      ],
+      "11": [
+        "Limits",
+        "Logarithmic Functions",
+        "Trigonometric Functions"
+      ],
+      "12": [
+        "Limits",
+        "Logarithmic Functions",
+        "Trigonometric Functions"
+      ],
+      "13": [
+        "Limits",
+        "Exponential Functions"
+      ],
+      "14": [
+        "Limits at Infinity",
+        "Exponential Functions"
+      ],
+      "15": [
+        "N/A - Visual/Image-based"
+      ],
+      "16": [
+        "N/A - Visual/Image-based"
+      ],
+      "17": [
+        "Absolute Extrema",
+        "Critical Numbers"
+      ],
+      "18": [
+        "Absolute Extrema",
+        "Critical Numbers"
+      ],
+      "19": [
+        "Absolute Extrema",
+        "Critical Numbers"
+      ]
+    },
+    "evaluations": {
+      "1": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "2": {
+        "attempted": true,
+        "solved": false,
+        "error_type": "Conceptual"
+      },
+      "3": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "4": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "5": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "6": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "7": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "8": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "9": {
+        "attempted": true,
+        "solved": false,
+        "error_type": "Conceptual"
+      },
+      "10": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "11": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "12": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "13": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "14": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "15": {
+        "attempted": false,
+        "solved": false,
+        "error_type": null
+      },
+      "16": {
+        "attempted": false,
+        "solved": false,
+        "error_type": null
+      },
+      "17": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "18": {
+        "attempted": true,
+        "solved": false,
+        "error_type": "Incomplete"
+      },
+      "19": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      }
+    }
+  }
+}
