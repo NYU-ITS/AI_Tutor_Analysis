@@ -1,0 +1,369 @@
+{
+  "metrics": {
+    "quantitative": {
+      "total_questions": 13,
+      "total_attempted": 13,
+      "total_solved": 13,
+      "total_errors": 0
+    },
+    "qualitative": {
+      "mastered_topics": [
+        {
+          "topic": "Absolute Value Function",
+          "evidence": {
+            "questions_tested": [
+              1
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q1: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Constant Function Derivative",
+          "evidence": {
+            "questions_tested": [
+              6
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q6: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Critical Points",
+          "evidence": {
+            "questions_tested": [
+              14
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q14: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Derivative Applications",
+          "evidence": {
+            "questions_tested": [
+              15
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q15: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Derivative of Trigonometric Functions",
+          "evidence": {
+            "questions_tested": [
+              4,
+              7
+            ],
+            "performance": "2/2 solved",
+            "details": [
+              "Q4: Solved",
+              "Q7: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Differentiability",
+          "evidence": {
+            "questions_tested": [
+              1
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q1: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Displacement and Distance",
+          "evidence": {
+            "questions_tested": [
+              15
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q15: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Fractional Exponents",
+          "evidence": {
+            "questions_tested": [
+              5
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q5: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Higher Order Derivatives",
+          "evidence": {
+            "questions_tested": [
+              7
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q7: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Horizontal Tangent Lines",
+          "evidence": {
+            "questions_tested": [
+              14
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q14: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Limit Definition of Derivative",
+          "evidence": {
+            "questions_tested": [
+              8,
+              9,
+              10,
+              11
+            ],
+            "performance": "4/4 solved",
+            "details": [
+              "Q8: Solved",
+              "Q9: Solved",
+              "Q10: Solved",
+              "Q11: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Power Rule",
+          "evidence": {
+            "questions_tested": [
+              2,
+              3,
+              5,
+              8
+            ],
+            "performance": "4/4 solved",
+            "details": [
+              "Q2: Solved",
+              "Q3: Solved",
+              "Q5: Solved",
+              "Q8: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Quotient Rule",
+          "evidence": {
+            "questions_tested": [
+              9
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q9: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Radical Functions",
+          "evidence": {
+            "questions_tested": [
+              10,
+              11
+            ],
+            "performance": "2/2 solved",
+            "details": [
+              "Q10: Solved",
+              "Q11: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        },
+        {
+          "topic": "Velocity and Acceleration",
+          "evidence": {
+            "questions_tested": [
+              15
+            ],
+            "performance": "1/1 solved",
+            "details": [
+              "Q15: Solved"
+            ],
+            "reason": "All questions attempted and solved correctly"
+          }
+        }
+      ],
+      "needs_practice_topics": []
+    },
+    "methodology": {
+      "description": "Analysis based on hw4/metrics_definitions.md",
+      "mastered_criteria": "All questions for this topic were attempted AND all were solved correctly",
+      "needs_practice_criteria": "Not all questions attempted OR not all solved correctly",
+      "visual_questions_excluded": "Questions 12 and 13 (visual/image-based) were excluded from analysis"
+    }
+  },
+  "practice_problems": [],
+  "details": {
+    "topic_mapping": {
+      "1": [
+        "Differentiability",
+        "Absolute Value Function"
+      ],
+      "2": [
+        "Power Rule"
+      ],
+      "3": [
+        "Power Rule"
+      ],
+      "4": [
+        "Derivative of Trigonometric Functions"
+      ],
+      "5": [
+        "Power Rule",
+        "Fractional Exponents"
+      ],
+      "6": [
+        "Constant Function Derivative"
+      ],
+      "7": [
+        "Higher Order Derivatives",
+        "Derivative of Trigonometric Functions"
+      ],
+      "8": [
+        "Limit Definition of Derivative",
+        "Power Rule"
+      ],
+      "9": [
+        "Limit Definition of Derivative",
+        "Quotient Rule"
+      ],
+      "10": [
+        "Limit Definition of Derivative",
+        "Radical Functions"
+      ],
+      "11": [
+        "Limit Definition of Derivative",
+        "Radical Functions"
+      ],
+      "12": [
+        "N/A - Visual/Image-based"
+      ],
+      "13": [
+        "N/A - Visual/Image-based"
+      ],
+      "14": [
+        "Critical Points",
+        "Horizontal Tangent Lines"
+      ],
+      "15": [
+        "Derivative Applications",
+        "Velocity and Acceleration",
+        "Displacement and Distance"
+      ]
+    },
+    "evaluations": {
+      "1": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "2": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "3": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "4": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "5": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "6": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "7": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "8": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "9": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "10": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "11": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "12": {
+        "attempted": true,
+        "solved": false,
+        "error_type": "Incomplete"
+      },
+      "13": {
+        "attempted": false,
+        "solved": false,
+        "error_type": null
+      },
+      "14": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      },
+      "15": {
+        "attempted": true,
+        "solved": true,
+        "error_type": null
+      }
+    }
+  }
+}
