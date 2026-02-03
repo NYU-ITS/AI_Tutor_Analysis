@@ -2,9 +2,21 @@ import requests
 import json
 import time
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # Configuration
-PORTKEY_BASE_URL = "https://ai-gateway.apps.cloud.rt.nyu.edu/v1"
-PORTKEY_API_KEY = "ZEAsbFEzOrfEe8R8B6CZotq1YEiw"
+PORTKEY_BASE_URL = os.getenv("PORTKEY_BASE_URL", "https://ai-gateway.apps.cloud.rt.nyu.edu/v1")
+PORTKEY_API_KEY = os.getenv("PORTKEY_API_KEY")
+
+if not PORTKEY_API_KEY:
+    print("WARNING: PORTKEY_API_KEY not found in environment or .env file")
+
+
+        
 
 def ask(prompt: str, model: str = "gpt-4o", system: str = None, **kwargs) -> str:
     """
