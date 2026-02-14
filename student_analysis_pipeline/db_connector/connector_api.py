@@ -43,8 +43,8 @@ def health_check():
 
 @app.get("/export", response_model=Dict[str, Any])
 def export_conversations(
-    group: str = Query(..., description="Name of the Group"),
-    model: str = Query(..., description="Name of the Model (e.g. 'homework1')"),
+    group_id: str = Query(..., description="ID of the Group"),
+    model_id: str = Query(..., description="ID of the Model"),
     start_date: Optional[int] = Query(None, description="Start timestamp (Unix epoch)"),
     end_date: Optional[int] = Query(None, description="End timestamp (Unix epoch)")
 ):
@@ -54,12 +54,12 @@ def export_conversations(
     """
     session = SessionLocal()
     try:
-        logger.info(f"Export Request: Group='{group}', Model='{model}'")
+        logger.info(f"Export Request: Group ID='{group_id}', Model ID='{model_id}'")
 
         # 1. Get Group
-        group_obj = session.query(Group).filter(Group.name == group).first()
+        group_obj = session.query(Group).filter(Group.id == group_id).first()
         if not group_obj:
-            raise HTTPException(status_code=404, detail=f"Group '{group}' not found")
+            raise HTTPException(status_code=404, detail=f"Group with ID '{group_id}' not found")
 
         # 2. Get Users in Group
         group_user_ids = []
@@ -90,8 +90,8 @@ def export_conversations(
 
         # Prepare Output Directory
         # Sanitize folder name
-        safe_group = "".join([c if c.isalnum() else "_" for c in group])
-        safe_model = "".join([c if c.isalnum() else "_" for c in model])
+        safe_group = "".join([c if c.isalnum() else "_" for c in group_id])
+        safe_model = "".join([c if c.isalnum() else "_" for c in model_id])
         output_dir = os.path.join("extracted_data", f"{safe_group}__{safe_model}")
         os.makedirs(output_dir, exist_ok=True)
 
@@ -121,7 +121,7 @@ def export_conversations(
                     chat_models = c_content.get('models', [])
             
             # Check for exact match
-            if model in chat_models:
+            if model_id in chat_models:
                 # --- MATCH FOUND ---
                 chat_data = {
                     "id": chat.id,
@@ -166,8 +166,8 @@ def export_conversations(
 
         return {
             "status": "success",
-            "group": group,
-            "model": model,
+            "group_id": group_id,
+            "model_id": model_id,
             "total_users": len(user_chats_map),
             "total_conversations": sum(len(c) for c in user_chats_map.values()),
             "output_directory": os.path.abspath(output_dir),
