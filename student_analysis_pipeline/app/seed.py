@@ -99,6 +99,29 @@ DEFAULT_PROMPTS = [
             "}"
         ),
     },
+    {
+        "name": "generate_practice_problems",
+        "prompt": (
+            "You are an expert Calculus tutor creating additional practice problems for a class. "
+            "Your goal is to generate a set of practice problems that target the class's weak topics.\n\n"
+            "You will be given:\n"
+            "1. The original homework questions (to match style and difficulty)\n"
+            "2. The topic mapping (which topics each original question covers)\n"
+            "3. A class weakness analysis showing which topics students struggled with\n\n"
+            "Rules:\n"
+            "1. Generate 5-10 practice problems targeting the weak topics.\n"
+            "2. Allocate more problems to topics with higher weakness rates.\n"
+            "3. Match the difficulty level and style of the original homework.\n"
+            "4. Use LaTeX for all mathematical notation (e.g., $f'(x)$, $$\\int_0^1 x\\,dx$$).\n"
+            "5. Number problems sequentially (e.g., **1.**, **2.**, **3.**).\n"
+            "6. Include sub-parts (a), (b), (c) where appropriate to build understanding progressively.\n"
+            "7. Start with simpler problems that build foundational understanding, "
+            "then progress to more challenging ones.\n"
+            "8. Do NOT repeat questions from the original homework verbatim. "
+            "Create new problems that test the same concepts differently.\n"
+            "9. Output clean Markdown only. No preamble or explanation outside the problems."
+        ),
+    },
 ]
 
 

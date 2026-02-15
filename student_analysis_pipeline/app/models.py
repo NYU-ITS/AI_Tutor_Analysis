@@ -133,7 +133,10 @@ class TutorPracticeProblem(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, nullable=True)  # references user.id in OpenWebUI DB
     homework_id = Column(String, ForeignKey("tutor_homework.id"), nullable=True)
+    group_id = Column(String, nullable=True)  # references group.id in OpenWebUI DB
     source = Column(String, nullable=True)  # ai_generated / user_uploaded
-    status = Column(String, nullable=True)  # pending / approved
+    status = Column(String, nullable=True)  # pending / approved / rejected
     version_number = Column(Integer, default=1)
+    problem_data = Column(Text, nullable=True)  # generated practice problems in markdown
+    weakness_summary = Column(JSON, nullable=True)  # class weakness snapshot that drove generation
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

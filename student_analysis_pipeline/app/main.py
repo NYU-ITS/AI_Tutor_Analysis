@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import homework, prompt, conversation, analysis
+from app.routers import homework, prompt, conversation, analysis, practice
 from app.database import engine, SessionLocal
 from app.models import Base
 from app.seed import seed_default_prompts
@@ -16,6 +16,7 @@ app.include_router(homework.router)
 app.include_router(prompt.router)
 app.include_router(conversation.router)
 app.include_router(analysis.router)
+app.include_router(practice.router)
 
 
 @app.get("/")
