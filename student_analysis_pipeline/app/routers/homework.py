@@ -2,6 +2,7 @@ import base64
 import json
 from datetime import datetime, timezone
 import fitz  # pymupdf
+from typing import Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -15,9 +16,9 @@ router = APIRouter(prefix="/homework", tags=["homework"])
 
 @router.get("/")
 def get_homework(
-    homework_id: int = Query(None, description="Filter by homework ID"),
-    group_id: str = Query(None, description="Filter by group ID"),
-    model_id: str = Query(None, description="Filter by model ID"),
+    homework_id: Optional[str] = Query(None, description="Filter by homework ID"),
+    group_id: Optional[str] = Query(None, description="Filter by group ID"),
+    model_id: Optional[str] = Query(None, description="Filter by model ID"),
     db: Session = Depends(get_db),
 ):
     """List homework entries with upload status for the frontend."""
@@ -39,6 +40,7 @@ def get_homework(
             "question_uploaded_at": hw.question_uploaded_at,
             "answer_uploaded": hw.answer_uploaded_at is not None,
             "answer_uploaded_at": hw.answer_uploaded_at,
+            "answer_source": hw.answer_source,
             "topic_mapped": hw.topic_mapped_at is not None,
             "topic_mapped_at": hw.topic_mapped_at,
             "question_data": hw.question_data,
@@ -86,11 +88,11 @@ async def convert_pdf_to_markdown(
     doc_type: str = Query(..., pattern="^(question|answer)$", description="Type of document: 'question' or 'answer'"),
     group_id: str = Query(..., description="Group ID (required)."),
     model_id: str = Query(..., description="Model ID (required)."),
-    homework_id: int = Query(None, description="Existing homework ID to update. Omit to create new."),
     db: Session = Depends(get_db),
 ):
     """Upload a homework or answer PDF -> LLM converts to Markdown -> saved to DB.
 
+    Upserts by group_id + model_id (one homework per group+model).
     When doc_type=question, topic mapping runs automatically after conversion.
     """
     if file.content_type != "application/pdf":
@@ -114,12 +116,13 @@ async def convert_pdf_to_markdown(
 
     now = datetime.now(timezone.utc)
 
-    # Save to database
-    if homework_id:
-        hw = db.query(TutorHomework).filter(TutorHomework.id == homework_id).first()
-        if not hw:
-            raise HTTPException(status_code=404, detail=f"Homework {homework_id} not found")
-    else:
+    # Upsert: find existing homework for this group + model, or create new
+    hw = (
+        db.query(TutorHomework)
+        .filter(TutorHomework.group_id == group_id, TutorHomework.model_id == model_id)
+        .first()
+    )
+    if not hw:
         hw = TutorHomework(group_id=group_id, model_id=model_id)
         db.add(hw)
 
@@ -128,6 +131,7 @@ async def convert_pdf_to_markdown(
         hw.question_uploaded_at = now
     else:
         hw.answer_data = markdown
+        hw.answer_source = "uploaded"
         hw.answer_uploaded_at = now
 
     db.commit()

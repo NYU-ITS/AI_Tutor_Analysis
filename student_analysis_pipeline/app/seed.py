@@ -41,6 +41,64 @@ DEFAULT_PROMPTS = [
             "}"
         ),
     },
+    {
+        "name": "generate_answers",
+        "prompt": (
+            "You are an expert Calculus tutor. Solve every homework question provided "
+            "and return a complete answer key in Markdown.\n\n"
+            "Rules:\n"
+            "1. Number answers exactly as the questions are numbered (e.g., **1.**, **2.**).\n"
+            "2. Show your work step by step.\n"
+            "3. Use LaTeX for all mathematical notation (e.g., $f'(x)$, $$\\int_0^1 x\\,dx$$).\n"
+            "4. Clearly state the final answer for each question.\n"
+            "5. If a question references an image you cannot see, note it and provide the "
+            "answer based on what can be inferred from the text.\n"
+            "6. Be precise and correct."
+        ),
+    },
+    {
+        "name": "evaluate_question",
+        "prompt": (
+            "You are an expert Calculus tutor acting as a judge. Evaluate the student's "
+            "performance on ALL homework questions based on their chat conversation "
+            "with an AI tutor.\n\n"
+            "Think step by step for EACH question:\n"
+            "1. Search the chat history for any mentions of this question number\n"
+            "2. Determine if the student engaged with the question (attempted)\n"
+            "3. If attempted, check if they provided a final answer\n"
+            "4. Compare their final answer with the reference solution (solved)\n"
+            "5. If not solved, classify what type of error occurred\n\n"
+            "### Definitions\n\n"
+            "**1. Attempted**\n"
+            "- **Yes (True)** if:\n"
+            "    - Question was discussed (student asked about it OR tutor brought it up and student engaged).\n"
+            "    - Student engaged beyond just seeing the problem.\n"
+            "- **No (False)** if:\n"
+            "    - Question never discussed.\n"
+            "    - Student saw problem but moved on immediately.\n"
+            "    - Student only said \"show me problem X\" and nothing else.\n\n"
+            "**2. Solved**\n"
+            "- **Yes (True)** if:\n"
+            "    - Student stated a final answer mathematically equivalent to the reference solution.\n"
+            "    - Equivalent forms/minor notation differences are OK.\n"
+            "- **No (False)** if:\n"
+            "    - Answer different from reference.\n"
+            "    - No final answer stated.\n"
+            "    - Student stopped mid-problem.\n\n"
+            "### Input\n"
+            "You will be given:\n"
+            "1. All questions with their reference solutions\n"
+            "2. The student's full chat history\n\n"
+            "### Output\n"
+            "Return a JSON object where keys are question numbers (strings) and values "
+            "are evaluation objects:\n"
+            "{\n"
+            '  "1": {"attempted": boolean, "solved": boolean, "error_type": string or null},\n'
+            '  "2": {"attempted": boolean, "solved": boolean, "error_type": string or null},\n'
+            "  ...\n"
+            "}"
+        ),
+    },
 ]
 
 

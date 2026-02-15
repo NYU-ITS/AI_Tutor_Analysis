@@ -45,7 +45,7 @@ def create_general_prompt(body: GeneralPromptCreate, db: Session = Depends(get_d
 
 
 @router.put("/general/{prompt_id}")
-def update_general_prompt(prompt_id: int, body: PromptUpdate, db: Session = Depends(get_db)):
+def update_general_prompt(prompt_id: str, body: PromptUpdate, db: Session = Depends(get_db)):
     p = db.query(GeneralPrompt).filter(GeneralPrompt.id == prompt_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Prompt not found")
@@ -81,7 +81,7 @@ def create_tutor_prompt(body: TutorPromptCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/tutor/{prompt_id}")
-def update_tutor_prompt(prompt_id: int, body: PromptUpdate, db: Session = Depends(get_db)):
+def update_tutor_prompt(prompt_id: str, body: PromptUpdate, db: Session = Depends(get_db)):
     p = db.query(TutorPrompt).filter(TutorPrompt.id == prompt_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Prompt not found")
