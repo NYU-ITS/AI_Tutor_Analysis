@@ -3,13 +3,13 @@ import json
 from datetime import datetime, timezone
 import fitz  # pymupdf
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.services.llm import ask, ask_with_images
 from app.services.prompt import get_prompt
-from app.database import get_db
-from app.models import TutorHomework
+from app.database import get_db, SessionLocal
+from app.models import PipelineJob, TutorHomework
 
 router = APIRouter(prefix="/homework", tags=["homework"])
 
@@ -82,72 +82,95 @@ def _run_topic_mapping(hw: TutorHomework, db: Session) -> dict:
     return topic_mapping
 
 
+def _run_pdf_to_markdown(
+    job_id: str, pdf_bytes: bytes, doc_type: str, group_id: str, model_id: str
+) -> None:
+    """Runs in the background. Opens its own DB session independent of the request."""
+    db = SessionLocal()
+    try:
+        job = db.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+        job.status = "running"
+        db.commit()
+
+        images = pdf_to_images(pdf_bytes)
+        system_prompt = get_prompt(db, "pdf_to_markdown", group_id=group_id)
+        markdown = ask_with_images(
+            prompt="Convert this document to Markdown. Reproduce every question exactly.",
+            image_urls=images,
+            system=system_prompt,
+        )
+
+        now = datetime.now(timezone.utc)
+        hw = (
+            db.query(TutorHomework)
+            .filter(TutorHomework.group_id == group_id, TutorHomework.model_id == model_id)
+            .first()
+        )
+        if not hw:
+            hw = TutorHomework(group_id=group_id, model_id=model_id)
+            db.add(hw)
+
+        if doc_type == "question":
+            hw.question_data = markdown
+            hw.question_uploaded_at = now
+        else:
+            hw.answer_data = markdown
+            hw.answer_source = "uploaded"
+            hw.answer_uploaded_at = now
+
+        db.commit()
+        db.refresh(hw)
+
+        if doc_type == "question":
+            _run_topic_mapping(hw, db)
+
+        job.homework_id = hw.id
+        job.status = "done"
+        job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+
+    except Exception as e:
+        job = db.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error = str(e)
+            db.commit()
+    finally:
+        db.close()
+
+
 @router.post("/pdf-to-markdown")
 async def convert_pdf_to_markdown(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     doc_type: str = Query(..., pattern="^(question|answer)$", description="Type of document: 'question' or 'answer'"),
     group_id: str = Query(..., description="Group ID (required)."),
     model_id: str = Query(..., description="Model ID (required)."),
     db: Session = Depends(get_db),
 ):
-    """Upload a homework or answer PDF -> LLM converts to Markdown -> saved to DB.
+    """Upload a homework or answer PDF -> LLM converts to Markdown in background.
 
+    Returns a job_id immediately. Poll GET /pipeline/status/{job_id} for progress.
     Upserts by group_id + model_id (one homework per group+model).
     When doc_type=question, topic mapping runs automatically after conversion.
     """
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="File must be a PDF")
 
+    # Read bytes now — UploadFile is request-scoped and unavailable in background
     pdf_bytes = await file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    images = pdf_to_images(pdf_bytes)
-    if not images:
-        raise HTTPException(status_code=400, detail="Could not extract pages from PDF")
-
-    system_prompt = get_prompt(db, "pdf_to_markdown", group_id=group_id)
-
-    markdown = ask_with_images(
-        prompt="Convert this document to Markdown. Reproduce every question exactly.",
-        image_urls=images,
-        system=system_prompt,
-    )
-
-    now = datetime.now(timezone.utc)
-
-    # Upsert: find existing homework for this group + model, or create new
-    hw = (
-        db.query(TutorHomework)
-        .filter(TutorHomework.group_id == group_id, TutorHomework.model_id == model_id)
-        .first()
-    )
-    if not hw:
-        hw = TutorHomework(group_id=group_id, model_id=model_id)
-        db.add(hw)
-
-    if doc_type == "question":
-        hw.question_data = markdown
-        hw.question_uploaded_at = now
-    else:
-        hw.answer_data = markdown
-        hw.answer_source = "uploaded"
-        hw.answer_uploaded_at = now
-
+    job = PipelineJob(step="pdf_to_markdown")
+    db.add(job)
     db.commit()
-    db.refresh(hw)
+    db.refresh(job)
 
-    # Auto-run topic mapping after question upload
-    topic_mapping = None
-    if doc_type == "question":
-        topic_mapping = _run_topic_mapping(hw, db)
+    background_tasks.add_task(_run_pdf_to_markdown, job.id, pdf_bytes, doc_type, group_id, model_id)
 
     return {
-        "homework_id": hw.id,
-        "doc_type": doc_type,
-        "markdown": markdown,
-        "topic_mapping": topic_mapping,
-        "question_uploaded_at": hw.question_uploaded_at,
-        "answer_uploaded_at": hw.answer_uploaded_at,
-        "topic_mapped_at": hw.topic_mapped_at,
+        "job_id": job.id,
+        "status": "queued",
+        "message": "PDF conversion started. Poll GET /pipeline/status/{job_id} for progress.",
     }

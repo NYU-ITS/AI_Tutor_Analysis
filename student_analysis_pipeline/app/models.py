@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey, JSON, Integer
+from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey, JSON, Integer  # Integer kept for StudentAnalysis
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -127,6 +127,32 @@ class TutorErrorType(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class PipelineJob(Base):
+    """Tracks any background pipeline step so the frontend can poll for status."""
+    __tablename__ = "pipeline_job"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    step = Column(String, nullable=False)        # pdf_to_markdown / run_analysis / generate_practice
+    homework_id = Column(String, nullable=True)  # may be set by the background worker after creation
+    student_id = Column(String, nullable=True)   # run_analysis only: None = all students
+    status = Column(String, default="queued")    # queued / running / done / failed
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    finished_at = Column(DateTime, nullable=True)
+
+
+class StudentPracticeAssignment(Base):
+    __tablename__ = "student_practice_assignment"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    student_id = Column(String, nullable=False)
+    student_email = Column(String, nullable=True)
+    homework_id = Column(String, nullable=False)
+    practice_problem_id = Column(String, ForeignKey("tutor_practice_problem.id"), nullable=False)
+    assigned_items = Column(JSON, nullable=True)  # subset of problem_items matched to student's weak topics
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class TutorPracticeProblem(Base):
     __tablename__ = "tutor_practice_problem"
 
@@ -138,5 +164,6 @@ class TutorPracticeProblem(Base):
     status = Column(String, nullable=True)  # pending / approved / rejected
     version_number = Column(Integer, default=1)
     problem_data = Column(Text, nullable=True)  # generated practice problems in markdown
+    problem_items = Column(JSON, nullable=True)  # [{number, text, topics[]}] from LLM
     weakness_summary = Column(JSON, nullable=True)  # class weakness snapshot that drove generation
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

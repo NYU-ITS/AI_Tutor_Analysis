@@ -2,12 +2,12 @@ import json
 import re
 from typing import Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends, Query, Body
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query, Body
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import (
-    TutorHomework, StudentConversation, StudentAnalysis,
+    PipelineJob, TutorHomework, StudentConversation, StudentAnalysis,
     StudentQuestionEvaluation, StudentTopicPerformance, TutorErrorType,
 )
 from app.services.llm import ask
@@ -278,24 +278,145 @@ def delete_error_types(
     return {"deleted": deleted > 0, "message": "Reverted to default error types"}
 
 
+# ── Background Worker ──
+
+def _run_analysis_job(job_id: str, homework_id: str, student_id: Optional[str]) -> None:
+    """Runs in the background. Opens its own DB session independent of the request."""
+    db = SessionLocal()
+    try:
+        job = db.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+        job.status = "running"
+        db.commit()
+
+        # ── 1. Get homework data ──
+        hw = db.query(TutorHomework).filter(TutorHomework.id == homework_id).first()
+
+        # Auto-generate answers if not uploaded
+        if not hw.answer_data:
+            gen_prompt = get_prompt(db, "generate_answers", group_id=hw.group_id)
+            hw.answer_data = ask(prompt=hw.question_data, system=gen_prompt)
+            hw.answer_source = "ai_generated"
+            hw.answer_uploaded_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(hw)
+
+        all_questions = _parse_questions_from_markdown(hw.question_data)
+        answers = _parse_answers_from_markdown(hw.answer_data)
+        topic_mapping = hw.topic_mapping
+
+        # Filter out visual questions
+        questions = {
+            q_num: q_text
+            for q_num, q_text in all_questions.items()
+            if not any("Visual/Image-based" in t for t in topic_mapping.get(q_num, []))
+        }
+
+        # ── 2. Get student conversations ──
+        conv_query = db.query(StudentConversation).filter(
+            StudentConversation.homework_id == homework_id,
+        )
+        if student_id:
+            conv_query = conv_query.filter(StudentConversation.student_id == student_id)
+        conversations = conv_query.all()
+
+        # ── 3. Build evaluation prompt ──
+        base_prompt = get_prompt(db, "evaluate_question", group_id=hw.group_id)
+        error_type_row = db.query(TutorErrorType).filter(TutorErrorType.group_id == hw.group_id).first()
+        error_types = error_type_row.data if error_type_row else DEFAULT_ERROR_TYPES
+        eval_prompt = _build_eval_prompt(base_prompt, error_types)
+
+        # ── 4. Process each student ──
+        now = datetime.now(timezone.utc)
+
+        for conv in conversations:
+            chat_history = conv.conversation_markdown or ""
+            evaluations = _evaluate_all_questions(questions, answers, chat_history, eval_prompt)
+            metrics = _aggregate_metrics(evaluations, topic_mapping)
+
+            analysis = (
+                db.query(StudentAnalysis)
+                .filter(
+                    StudentAnalysis.student_id == conv.student_id,
+                    StudentAnalysis.homework_id == homework_id,
+                )
+                .first()
+            )
+            if not analysis:
+                analysis = StudentAnalysis(
+                    student_id=conv.student_id,
+                    student_email=conv.student_email,
+                    homework_id=homework_id,
+                )
+                db.add(analysis)
+
+            analysis.total_question = metrics["total_question"]
+            analysis.total_attempted = metrics["total_attempted"]
+            analysis.total_solved = metrics["total_solved"]
+            analysis.total_errors = metrics["total_errors"]
+            analysis.created_at = now
+            db.flush()
+
+            db.query(StudentQuestionEvaluation).filter(
+                StudentQuestionEvaluation.student_analysis_id == analysis.id
+            ).delete()
+            db.query(StudentTopicPerformance).filter(
+                StudentTopicPerformance.student_analysis_id == analysis.id
+            ).delete()
+
+            for q_num, eval_result in evaluations.items():
+                attempted = eval_result.get("attempted", False)
+                solved = eval_result.get("solved", False)
+                error_type = eval_result.get("error_type")
+                if not attempted:
+                    error_type = "Not Attempted"
+                db.add(StudentQuestionEvaluation(
+                    student_analysis_id=analysis.id,
+                    question_number=int(q_num),
+                    attempted=attempted,
+                    solved=solved,
+                    error_type=error_type,
+                ))
+
+            for tp in metrics["topic_performances"]:
+                db.add(StudentTopicPerformance(
+                    student_analysis_id=analysis.id,
+                    topic_name=tp["topic_name"],
+                    status=tp["status"],
+                    question_tested=tp["question_tested"],
+                    questions_solved=tp["questions_solved"],
+                    details=tp["details"],
+                    reason=tp["reason"],
+                ))
+
+            db.commit()
+
+        job.status = "done"
+        job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+
+    except Exception as e:
+        job = db.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error = str(e)
+            db.commit()
+    finally:
+        db.close()
+
+
 # ── Analysis Endpoints ──
 
 @router.post("/run")
 def run_analysis(
+    background_tasks: BackgroundTasks,
     homework_id: str = Query(..., description="Homework ID to analyze"),
     student_id: Optional[str] = Query(None, description="Analyze a single student. Omit to analyze all."),
     db: Session = Depends(get_db),
 ):
-    """Pipeline 3 – Evaluate student performance per question, aggregate by topic.
+    """Pipeline 3 – Start analysis in the background. Returns a job_id immediately.
 
-    For each student with a conversation for this homework:
-    1. Parse questions and answers from homework markdown.
-    2. LLM evaluates each question (attempted, solved, error_type).
-    3. Aggregate into summary stats and topic performance.
-    4. Save to student_analysis, student_question_evaluations, student_topic_performance.
+    Poll GET /analysis/status/{job_id} to track progress.
     """
-
-    # ── 1. Get homework data ──
     hw = db.query(TutorHomework).filter(TutorHomework.id == homework_id).first()
     if not hw:
         raise HTTPException(status_code=404, detail=f"Homework {homework_id} not found")
@@ -304,152 +425,24 @@ def run_analysis(
     if not hw.topic_mapping:
         raise HTTPException(status_code=400, detail="Homework has no topic mapping. Upload questions first.")
 
-    # Auto-generate answers if not uploaded
-    if not hw.answer_data:
-        gen_prompt = get_prompt(db, "generate_answers", group_id=hw.group_id)
-        hw.answer_data = ask(
-            prompt=hw.question_data,
-            system=gen_prompt,
-        )
-        hw.answer_source = "ai_generated"
-        hw.answer_uploaded_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(hw)
-
-    all_questions = _parse_questions_from_markdown(hw.question_data)
-    answers = _parse_answers_from_markdown(hw.answer_data)
-    topic_mapping = hw.topic_mapping  # {q_num_str: [topics]}
-
-    if not all_questions:
-        raise HTTPException(status_code=400, detail="Could not parse questions from homework markdown")
-
-    # Filter out visual/image-based questions — LLM can't evaluate them
-    questions = {}
-    skipped_visual = []
-    for q_num, q_text in all_questions.items():
-        topics = topic_mapping.get(q_num, [])
-        if any("Visual/Image-based" in t for t in topics):
-            skipped_visual.append(q_num)
-        else:
-            questions[q_num] = q_text
-
-    # ── 2. Get student conversations ──
-    conv_query = db.query(StudentConversation).filter(
-        StudentConversation.homework_id == homework_id,
-    )
+    # Verify there are conversations before queuing
+    conv_query = db.query(StudentConversation).filter(StudentConversation.homework_id == homework_id)
     if student_id:
         conv_query = conv_query.filter(StudentConversation.student_id == student_id)
-
-    conversations = conv_query.all()
-    if not conversations:
+    if not conv_query.first():
         raise HTTPException(status_code=404, detail="No student conversations found for this homework")
 
-    # ── 3. Build evaluation prompt with error types ──
-    base_prompt = get_prompt(db, "evaluate_question", group_id=hw.group_id)
-
-    # Load user-defined error types for this group, or use defaults
-    error_type_row = db.query(TutorErrorType).filter(TutorErrorType.group_id == hw.group_id).first()
-    error_types = error_type_row.data if error_type_row else DEFAULT_ERROR_TYPES
-
-    eval_prompt = _build_eval_prompt(base_prompt, error_types)
-
-    # ── 4. Process each student ──
-    now = datetime.now(timezone.utc)
-    results = []
-
-    for conv in conversations:
-        chat_history = conv.conversation_markdown or ""
-
-        # Evaluate all questions in a single LLM call
-        evaluations = _evaluate_all_questions(questions, answers, chat_history, eval_prompt)
-
-        # Aggregate metrics
-        metrics = _aggregate_metrics(evaluations, topic_mapping)
-
-        # ── 5. Save to DB (upsert) ──
-        analysis = (
-            db.query(StudentAnalysis)
-            .filter(
-                StudentAnalysis.student_id == conv.student_id,
-                StudentAnalysis.homework_id == homework_id,
-            )
-            .first()
-        )
-        if not analysis:
-            analysis = StudentAnalysis(
-                student_id=conv.student_id,
-                student_email=conv.student_email,
-                homework_id=homework_id,
-            )
-            db.add(analysis)
-
-        analysis.total_question = metrics["total_question"]
-        analysis.total_attempted = metrics["total_attempted"]
-        analysis.total_solved = metrics["total_solved"]
-        analysis.total_errors = metrics["total_errors"]
-        analysis.created_at = now
-
-        db.flush()  # get analysis.id for child rows
-
-        # Clear old evaluations and topic performances for this analysis
-        db.query(StudentQuestionEvaluation).filter(
-            StudentQuestionEvaluation.student_analysis_id == analysis.id
-        ).delete()
-        db.query(StudentTopicPerformance).filter(
-            StudentTopicPerformance.student_analysis_id == analysis.id
-        ).delete()
-
-        # Insert question evaluations
-        for q_num, eval_result in evaluations.items():
-            attempted = eval_result.get("attempted", False)
-            solved = eval_result.get("solved", False)
-            error_type = eval_result.get("error_type")
-
-            # Ensure unattempted questions always show "Not Attempted"
-            if not attempted:
-                error_type = "Not Attempted"
-
-            db.add(StudentQuestionEvaluation(
-                student_analysis_id=analysis.id,
-                question_number=int(q_num),
-                attempted=attempted,
-                solved=solved,
-                error_type=error_type,
-            ))
-
-        # Insert topic performances
-        for tp in metrics["topic_performances"]:
-            db.add(StudentTopicPerformance(
-                student_analysis_id=analysis.id,
-                topic_name=tp["topic_name"],
-                status=tp["status"],
-                question_tested=tp["question_tested"],
-                questions_solved=tp["questions_solved"],
-                details=tp["details"],
-                reason=tp["reason"],
-            ))
-
-        results.append({
-            "student_id": conv.student_id,
-            "student_email": conv.student_email,
-            "total_question": metrics["total_question"],
-            "total_attempted": metrics["total_attempted"],
-            "total_solved": metrics["total_solved"],
-            "total_errors": metrics["total_errors"],
-            "topics_mastered": sum(1 for t in metrics["topic_performances"] if t["status"] == "mastered"),
-            "topics_needs_practice": sum(1 for t in metrics["topic_performances"] if t["status"] == "needs_practice"),
-        })
-
+    job = PipelineJob(step="run_analysis", homework_id=homework_id, student_id=student_id)
+    db.add(job)
     db.commit()
+    db.refresh(job)
+
+    background_tasks.add_task(_run_analysis_job, job.id, homework_id, student_id)
 
     return {
-        "status": "success",
-        "homework_id": homework_id,
-        "students_analyzed": len(results),
-        "questions_evaluated": len(questions),
-        "questions_skipped_visual": skipped_visual,
-        "error_types_used": [et["name"] for et in error_types],
-        "students": results,
+        "job_id": job.id,
+        "status": "queued",
+        "message": "Analysis started. Poll GET /pipeline/status/{job_id} for progress.",
     }
 
 

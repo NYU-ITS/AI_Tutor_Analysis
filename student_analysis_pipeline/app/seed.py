@@ -119,16 +119,22 @@ DEFAULT_PROMPTS = [
             "then progress to more challenging ones.\n"
             "8. Do NOT repeat questions from the original homework verbatim. "
             "Create new problems that test the same concepts differently.\n"
-            "9. Output clean Markdown only. No preamble or explanation outside the problems."
+            "9. Tag each problem with 1-3 topic names drawn exactly from the topic mapping provided.\n\n"
+            "Output a single JSON object with exactly two keys:\n"
+            "- \"problems\": array of objects, each with: \"number\" (int), \"text\" (the problem in Markdown), \"topics\" (array of topic name strings)\n"
+            "- \"markdown\": the full problem set as clean Markdown (numbered **1.** **2.** etc.)\n\n"
+            "Return ONLY valid JSON. No preamble, no code fences."
         ),
     },
 ]
 
 
 def seed_default_prompts(db) -> None:
-    """Insert default general prompts if they don't exist yet."""
+    """Upsert default general prompts — inserts if missing, updates prompt text if already exists."""
     for p in DEFAULT_PROMPTS:
-        exists = db.query(GeneralPrompt).filter(GeneralPrompt.name == p["name"]).first()
-        if not exists:
+        row = db.query(GeneralPrompt).filter(GeneralPrompt.name == p["name"]).first()
+        if not row:
             db.add(GeneralPrompt(name=p["name"], prompt=p["prompt"]))
+        else:
+            row.prompt = p["prompt"]
     db.commit()

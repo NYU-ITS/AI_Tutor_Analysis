@@ -1,12 +1,12 @@
 import json
 from typing import Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import (
-    TutorHomework, StudentAnalysis, StudentTopicPerformance,
+    PipelineJob, TutorHomework, StudentAnalysis, StudentTopicPerformance,
     TutorPracticeProblem,
 )
 from app.services.llm import ask
@@ -104,22 +104,91 @@ def get_class_weakness(
     }
 
 
+def _run_generate_practice(
+    job_id: str, homework_id: str, user_id: Optional[str], weakness_threshold: float
+) -> None:
+    """Runs in the background. Opens its own DB session independent of the request."""
+    db = SessionLocal()
+    try:
+        job = db.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+        job.status = "running"
+        db.commit()
+
+        hw = db.query(TutorHomework).filter(TutorHomework.id == homework_id).first()
+        weak_topics = _aggregate_class_weakness(db, homework_id, weakness_threshold)
+
+        system_prompt = get_prompt(db, "generate_practice_problems", group_id=hw.group_id)
+
+        weakness_block = ""
+        for wt in weak_topics:
+            weakness_block += (
+                f"- **{wt['topic_name']}**: {wt['students_weak']}/{wt['students_tested']} students "
+                f"need practice ({wt['weakness_rate']*100:.0f}% weakness rate)\n"
+            )
+
+        user_prompt = (
+            f"## Original Homework Questions\n\n"
+            f"{hw.question_data}\n\n"
+            f"## Topic Mapping\n\n"
+            f"{json.dumps(hw.topic_mapping, indent=2)}\n\n"
+            f"## Class Weakness Analysis\n\n"
+            f"The following topics were identified as weak across the class:\n\n"
+            f"{weakness_block}\n"
+            f"Generate practice problems that target these weak topics. "
+            f"Focus more problems on topics with higher weakness rates."
+        )
+
+        raw = ask(prompt=user_prompt, system=system_prompt, response_format={"type": "json_object"})
+        parsed = json.loads(raw)
+        problem_items = parsed.get("problems", [])
+        problem_markdown = parsed.get("markdown", "")
+
+        existing_count = (
+            db.query(TutorPracticeProblem)
+            .filter(TutorPracticeProblem.homework_id == homework_id)
+            .count()
+        )
+
+        practice = TutorPracticeProblem(
+            user_id=user_id,
+            homework_id=homework_id,
+            group_id=hw.group_id,
+            source="ai_generated",
+            status="pending",
+            version_number=existing_count + 1,
+            problem_data=problem_markdown,
+            problem_items=problem_items,
+            weakness_summary=weak_topics,
+        )
+        db.add(practice)
+        db.commit()
+
+        job.status = "done"
+        job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+
+    except Exception as e:
+        job = db.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error = str(e)
+            db.commit()
+    finally:
+        db.close()
+
+
 @router.post("/generate")
 def generate_practice_problems(
+    background_tasks: BackgroundTasks,
     homework_id: str = Query(..., description="Homework ID to generate practice problems for"),
     user_id: Optional[str] = Query(None, description="User ID of the instructor triggering generation"),
     weakness_threshold: float = Query(0.5, ge=0.0, le=1.0, description="Min proportion of students weak on a topic to include it"),
     db: Session = Depends(get_db),
 ):
-    """Pipeline 4 -- Generate practice problems based on class weakness.
+    """Pipeline 4 -- Generate practice problems in the background.
 
-    1. Aggregate topic performance across all students for the homework.
-    2. Identify weak topics (where >= threshold of students need practice).
-    3. Use LLM to generate practice problems targeting those topics.
-    4. Store with status='pending' for instructor review.
+    Returns a job_id immediately. Poll GET /pipeline/status/{job_id} for progress.
     """
-
-    # ── 1. Get homework data ──
     hw = db.query(TutorHomework).filter(TutorHomework.id == homework_id).first()
     if not hw:
         raise HTTPException(status_code=404, detail=f"Homework {homework_id} not found")
@@ -128,7 +197,7 @@ def generate_practice_problems(
     if not hw.topic_mapping:
         raise HTTPException(status_code=400, detail="Homework has no topic mapping. Upload questions first.")
 
-    # ── 2. Aggregate class weakness ──
+    # Validate upfront — no point queuing if there's nothing to work with
     weak_topics = _aggregate_class_weakness(db, homework_id, weakness_threshold)
     if not weak_topics:
         raise HTTPException(
@@ -136,65 +205,17 @@ def generate_practice_problems(
             detail="No weak topics found. Either no analyses exist or all topics are mastered.",
         )
 
-    # ── 3. Build LLM prompt ──
-    system_prompt = get_prompt(db, "generate_practice_problems", group_id=hw.group_id)
-
-    weakness_block = ""
-    for wt in weak_topics:
-        weakness_block += (
-            f"- **{wt['topic_name']}**: {wt['students_weak']}/{wt['students_tested']} students "
-            f"need practice ({wt['weakness_rate']*100:.0f}% weakness rate)\n"
-        )
-
-    user_prompt = (
-        f"## Original Homework Questions\n\n"
-        f"{hw.question_data}\n\n"
-        f"## Topic Mapping\n\n"
-        f"{json.dumps(hw.topic_mapping, indent=2)}\n\n"
-        f"## Class Weakness Analysis\n\n"
-        f"The following topics were identified as weak across the class:\n\n"
-        f"{weakness_block}\n"
-        f"Generate practice problems that target these weak topics. "
-        f"Focus more problems on topics with higher weakness rates."
-    )
-
-    # ── 4. Call LLM ──
-    problem_markdown = ask(
-        prompt=user_prompt,
-        system=system_prompt,
-    )
-
-    # ── 5. Determine version number ──
-    existing_count = (
-        db.query(TutorPracticeProblem)
-        .filter(TutorPracticeProblem.homework_id == homework_id)
-        .count()
-    )
-
-    # ── 6. Save to DB ──
-    practice = TutorPracticeProblem(
-        user_id=user_id,
-        homework_id=homework_id,
-        group_id=hw.group_id,
-        source="ai_generated",
-        status="pending",
-        version_number=existing_count + 1,
-        problem_data=problem_markdown,
-        weakness_summary=weak_topics,
-    )
-    db.add(practice)
+    job = PipelineJob(step="generate_practice", homework_id=homework_id)
+    db.add(job)
     db.commit()
-    db.refresh(practice)
+    db.refresh(job)
+
+    background_tasks.add_task(_run_generate_practice, job.id, homework_id, user_id, weakness_threshold)
 
     return {
-        "status": "success",
-        "practice_problem_id": practice.id,
-        "homework_id": homework_id,
-        "group_id": hw.group_id,
-        "version_number": practice.version_number,
-        "weakness_summary": weak_topics,
-        "problem_data": problem_markdown,
-        "approval_status": "pending",
+        "job_id": job.id,
+        "status": "queued",
+        "message": "Practice generation started. Poll GET /pipeline/status/{job_id} for progress.",
     }
 
 
@@ -227,6 +248,7 @@ def get_practice_problems(
             "status": pp.status,
             "version_number": pp.version_number,
             "problem_data": pp.problem_data,
+            "problem_items": pp.problem_items,
             "weakness_summary": pp.weakness_summary,
             "created_at": pp.created_at,
         })
