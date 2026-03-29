@@ -55,7 +55,7 @@ def pdf_to_images(pdf_bytes: bytes) -> list[dict]:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     images = []
     for page in doc:
-        pix = page.get_pixmap(dpi=200)
+        pix = page.get_pixmap(dpi=150)
         img_bytes = pix.tobytes("png")
         b64 = base64.b64encode(img_bytes).decode()
         images.append({
@@ -94,11 +94,37 @@ def _run_pdf_to_markdown(
 
         images = pdf_to_images(pdf_bytes)
         system_prompt = get_prompt(db, "pdf_to_markdown", group_id=group_id)
-        markdown = ask_with_images(
-            prompt="Convert this document to Markdown. Reproduce every question exactly.",
-            image_urls=images,
-            system=system_prompt,
-        )
+
+        chunk_size = 5
+        if len(images) <= chunk_size:
+            # Small PDF: send all pages in one call
+            markdown = ask_with_images(
+                prompt="Convert this document to Markdown. Reproduce every question exactly.",
+                image_urls=images,
+                system=system_prompt,
+            )
+        else:
+            # Large PDF: process in chunks with 1-page overlap to preserve cross-page questions.
+            # Each non-first chunk includes the last page of the previous chunk as context only.
+            markdown_parts = []
+            i = 0
+            while i < len(images):
+                if i == 0:
+                    chunk = images[0:chunk_size]
+                    prompt = "Convert this document to Markdown. Reproduce every question exactly."
+                else:
+                    # Include 1 overlap page from the previous chunk for context
+                    chunk = images[i - 1:i + chunk_size]
+                    prompt = (
+                        "The FIRST image is an overlap page already transcribed in the previous section. "
+                        "Use it ONLY as context to complete any question that continues from it. "
+                        "Output ONLY the content from the SECOND image onwards. "
+                        "Reproduce every question exactly."
+                    )
+                part = ask_with_images(prompt=prompt, image_urls=chunk, system=system_prompt)
+                markdown_parts.append(part)
+                i += chunk_size
+            markdown = "\n\n".join(markdown_parts)
 
         now = datetime.now(timezone.utc)
         hw = (

@@ -38,7 +38,7 @@ def chat(messages: list, model: str = "gpt-4o", temperature: float = 0.0, max_re
                 f"{PORTKEY_BASE_URL}/chat/completions",
                 headers=headers,
                 json=payload,
-                timeout=120,
+                timeout=180,
             )
             response.raise_for_status()
 
