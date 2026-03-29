@@ -70,22 +70,6 @@ The API is now available at `http://localhost:8000`.
 - Health check: `GET http://localhost:8000/`
 - Interactive docs: `http://localhost:8000/docs` (Swagger UI)
 
-### Local No-Postgres Run (SQLite fallback)
-
-If you want to boot the API locally without PostgreSQL, use:
-
-```bash
-cd student_analysis_pipeline
-./run_local.sh
-```
-
-This script forces:
-
-- `PIPELINE_DATABASE_URL=sqlite:///./student_analysis.db`
-- `DATABASE_URL=sqlite:///./student_analysis.db`
-
-So the service can start even when local Postgres is not running.
-
 ## Pipeline Workflow
 
 Run these steps in order. Replace `GROUP_ID`, `MODEL_ID`, and `HOMEWORK_ID` with your actual values.
