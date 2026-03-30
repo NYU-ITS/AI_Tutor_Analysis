@@ -36,7 +36,7 @@ def test_chat_maps_known_model_id_and_returns_text(monkeypatch):
 
     assert out == "hello"
     assert captured["json"]["model"] == "@gpt-4o/gpt-4o"
-    assert captured["timeout"] == 120
+    assert captured["timeout"] == 180
 
 
 def test_chat_keeps_custom_model_when_not_in_map(monkeypatch):
