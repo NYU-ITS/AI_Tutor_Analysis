@@ -59,6 +59,8 @@ Tables are created automatically on server startup.
 
 ## Running the Server
 
+### Local Development
+
 ```bash
 cd student_analysis_pipeline
 source venv/bin/activate
@@ -69,6 +71,23 @@ The API is now available at `http://localhost:8000`.
 
 - Health check: `GET http://localhost:8000/`
 - Interactive docs: `http://localhost:8000/docs` (Swagger UI)
+
+### OpenShift Deployment
+
+The backend is deployed in OpenShift at namespace `rit-genai-naga-dev`.
+
+**From within the cluster** (e.g., from OpenWebUI or other services):
+```
+http://open-webui-mastering-homework.rit-genai-naga-dev.svc:8000
+```
+
+**For local testing of the deployed instance**, use port-forward:
+```bash
+oc port-forward deployment/open-webui-mastering-homework 8000:8000 -n rit-genai-naga-dev
+```
+Then access via `http://localhost:8000`
+
+See [k8s/DEPLOYMENT.md](student_analysis_pipeline/temp/k8s/DEPLOYMENT.md) for full deployment instructions.
 
 ## Pipeline Workflow
 
