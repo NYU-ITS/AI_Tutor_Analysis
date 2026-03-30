@@ -14,8 +14,8 @@ class _FakePix:
 
 
 class _FakePage:
-    def get_pixmap(self, dpi=200):
-        assert dpi == 200
+    def get_pixmap(self, dpi=150):
+        assert dpi == 150
         return _FakePix()
 
 
