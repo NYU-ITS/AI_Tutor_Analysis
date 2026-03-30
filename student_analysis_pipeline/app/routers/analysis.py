@@ -3,6 +3,7 @@ import re
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query, Body
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
@@ -12,6 +13,7 @@ from app.models import (
 )
 from app.services.llm import ask
 from app.services.prompt import get_prompt
+from app.services.pdf_generator import generate_analysis_pdf
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -448,12 +450,18 @@ def run_analysis(
 
 @router.get("/")
 def get_analyses(
+    analysis_id: Optional[str] = Query(None, description="Filter by analysis ID"),
     homework_id: Optional[str] = Query(None, description="Filter by homework ID"),
     student_id: Optional[str] = Query(None, description="Filter by student ID"),
     db: Session = Depends(get_db),
 ):
-    """List student analyses with question evaluations and topic performances."""
+    """List student analyses with question evaluations and topic performances.
+
+    Can filter by analysis_id (exact match), homework_id, and/or student_id.
+    """
     q = db.query(StudentAnalysis)
+    if analysis_id is not None:
+        q = q.filter(StudentAnalysis.id == analysis_id)
     if homework_id is not None:
         q = q.filter(StudentAnalysis.homework_id == homework_id)
     if student_id is not None:
@@ -493,3 +501,118 @@ def get_analyses(
             ],
         })
     return results
+
+
+@router.get("/export/{analysis_id}")
+def export_analysis_pdf(
+    analysis_id: str,
+    db: Session = Depends(get_db),
+):
+    """Export a single student analysis as a PDF report.
+
+    Generates a formatted PDF with metrics, topic performance, and practice recommendations.
+    """
+    sa = db.query(StudentAnalysis).filter(StudentAnalysis.id == analysis_id).first()
+    if not sa:
+        raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
+
+    # Build analysis data
+    analysis_data = {
+        "id": sa.id,
+        "student_id": sa.student_id,
+        "student_email": sa.student_email,
+        "homework_id": sa.homework_id,
+        "total_question": sa.total_question,
+        "total_attempted": sa.total_attempted,
+        "total_solved": sa.total_solved,
+        "total_errors": sa.total_errors,
+        "created_at": sa.created_at,
+        "topic_performances": [
+            {
+                "topic_name": tp.topic_name,
+                "status": tp.status,
+                "question_tested": tp.question_tested,
+                "questions_solved": tp.questions_solved,
+                "details": tp.details,
+                "reason": tp.reason,
+            }
+            for tp in sa.topic_performances
+        ],
+    }
+
+    # Generate PDF with homework name (extracted from homework_id or use default)
+    homework_name = f"Homework {sa.homework_id[-1]}" if sa.homework_id else "Homework"
+    pdf_buffer = generate_analysis_pdf(analysis_data, homework_name=homework_name)
+
+    return StreamingResponse(
+        iter([pdf_buffer.getvalue()]),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={sa.student_email}_{homework_name.lower().replace(' ', '')}_analysis.pdf"
+        },
+    )
+
+
+@router.get("/export-homework/")
+def export_homework_analyses(
+    homework_id: str = Query(..., description="Homework ID to export"),
+    db: Session = Depends(get_db),
+):
+    """Export all student analyses for a homework as a ZIP file with individual PDFs.
+
+    Each student gets their own PDF with their analysis.
+    """
+    import zipfile
+    from io import BytesIO
+
+    # Get all analyses for homework
+    analyses = db.query(StudentAnalysis).filter(
+        StudentAnalysis.homework_id == homework_id
+    ).all()
+
+    if not analyses:
+        raise HTTPException(status_code=404, detail=f"No analyses found for homework {homework_id}")
+
+    # Extract homework name from homework_id
+    homework_name = f"Homework {homework_id[-1]}" if homework_id else "Homework"
+
+    # Create zip file
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for sa in analyses:
+            # Build analysis data
+            analysis_data = {
+                "id": sa.id,
+                "student_id": sa.student_id,
+                "student_email": sa.student_email,
+                "homework_id": sa.homework_id,
+                "total_question": sa.total_question,
+                "total_attempted": sa.total_attempted,
+                "total_solved": sa.total_solved,
+                "total_errors": sa.total_errors,
+                "created_at": sa.created_at,
+                "topic_performances": [
+                    {
+                        "topic_name": tp.topic_name,
+                        "status": tp.status,
+                        "question_tested": tp.question_tested,
+                        "questions_solved": tp.questions_solved,
+                        "details": tp.details,
+                        "reason": tp.reason,
+                    }
+                    for tp in sa.topic_performances
+                ],
+            }
+
+            # Generate PDF with homework name
+            pdf_buffer = generate_analysis_pdf(analysis_data, homework_name=homework_name)
+            zip_file.writestr(f"{sa.student_email}_{homework_name.lower().replace(' ', '')}_analysis.pdf", pdf_buffer.getvalue())
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        iter([zip_buffer.getvalue()]),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename={homework_name.lower().replace(' ', '')}_analyses.zip"
+        },
+    )

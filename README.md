@@ -138,6 +138,20 @@ curl -X POST "http://localhost:8000/practice/generate?homework_id=HOMEWORK_ID&we
 curl -X PATCH "http://localhost:8000/practice/PRACTICE_ID/status?status=approved"
 ```
 
+### Step 8: Export Student Analysis Reports
+
+Export individual student analysis as PDF:
+
+```bash
+curl "http://localhost:8000/analysis/export/ANALYSIS_ID" -o student_analysis.pdf
+```
+
+Export all student analyses for a homework as ZIP:
+
+```bash
+curl "http://localhost:8000/analysis/export-homework/?homework_id=HOMEWORK_ID" -o homework_analyses.zip
+```
+
 ## API Reference
 
 ### Homework (`/homework`)
@@ -158,8 +172,10 @@ curl -X PATCH "http://localhost:8000/practice/PRACTICE_ID/status?status=approved
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/analysis/` | List analyses with question evaluations and topic performances. Filter by `homework_id`, `student_id` |
+| `GET` | `/analysis/` | List analyses with question evaluations and topic performances. Filter by `analysis_id` (optional), `homework_id` (optional), `student_id` (optional) |
 | `POST` | `/analysis/run` | Run student analysis. Params: `homework_id`, `student_id` (optional) |
+| `GET` | `/analysis/export/{analysis_id}` | Export a single student analysis as a formatted PDF report |
+| `GET` | `/analysis/export-homework/` | Export all student analyses for a homework as a ZIP file of PDFs. Param: `homework_id` |
 | `GET` | `/analysis/error-types` | Get error types for a group. Param: `group_id` |
 | `PUT` | `/analysis/error-types` | Set custom error types. Params: `group_id`, body: `[{name, description}]` |
 | `DELETE` | `/analysis/error-types` | Delete custom error types (revert to defaults). Param: `group_id` |
