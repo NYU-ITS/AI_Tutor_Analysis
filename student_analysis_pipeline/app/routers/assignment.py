@@ -106,9 +106,13 @@ def get_assignments(
     student_id: Optional[str] = Query(None, description="Filter by student ID"),
     homework_id: Optional[str] = Query(None, description="Filter by homework ID"),
     practice_problem_id: Optional[str] = Query(None, description="Filter by practice problem set ID"),
+    topic: Optional[str] = Query(None, description="Filter by topic name in assigned items"),
     db: Session = Depends(get_db),
 ):
-    """List practice assignments with optional filters. Returns most recent first."""
+    """List practice assignments with optional filters. Returns most recent first.
+
+    The topic filter matches assignments that have at least one item covering that topic.
+    """
     q = db.query(StudentPracticeAssignment)
     if student_id is not None:
         q = q.filter(StudentPracticeAssignment.student_id == student_id)
@@ -119,14 +123,27 @@ def get_assignments(
 
     results = []
     for a in q.order_by(StudentPracticeAssignment.created_at.desc()).all():
+        assigned_items = a.assigned_items if a.assigned_items else []
+
+        # Apply topic filter if specified
+        if topic is not None:
+            filtered_items = [
+                item for item in assigned_items
+                if topic in item.get("topics", [])
+            ]
+            # Skip this assignment if no items match the topic
+            if not filtered_items:
+                continue
+            assigned_items = filtered_items
+
         results.append({
             "id": a.id,
             "student_id": a.student_id,
             "student_email": a.student_email,
             "homework_id": a.homework_id,
             "practice_problem_id": a.practice_problem_id,
-            "assigned_items": a.assigned_items,
-            "assigned_count": len(a.assigned_items) if a.assigned_items else 0,
+            "assigned_items": assigned_items,
+            "assigned_count": len(assigned_items),
             "created_at": a.created_at,
         })
     return results
