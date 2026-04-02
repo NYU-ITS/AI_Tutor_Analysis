@@ -2,6 +2,7 @@ import json
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
@@ -13,6 +14,14 @@ from app.services.llm import ask
 from app.services.prompt import get_prompt
 
 router = APIRouter(prefix="/practice", tags=["practice"])
+
+
+# ── Request Models ──
+
+class UpdatePracticeProblemRequest(BaseModel):
+    problem_items: Optional[list] = None
+    problem_data: Optional[str] = None
+    status: Optional[str] = None  # approved / rejected / pending
 
 
 # ── Helpers ──
@@ -275,4 +284,46 @@ def update_practice_status(
         "status": practice.status,
         "homework_id": practice.homework_id,
         "version_number": practice.version_number,
+    }
+
+
+@router.patch("/{practice_id}")
+def update_practice_problems(
+    practice_id: str,
+    request: UpdatePracticeProblemRequest,
+    db: Session = Depends(get_db),
+):
+    """Update the problem_items, problem_data, and/or status for an existing practice problem set.
+
+    This allows instructors to edit generated practice problems and persist the changes.
+    All fields are optional—update only what needs to change.
+    """
+    practice = db.query(TutorPracticeProblem).filter(TutorPracticeProblem.id == practice_id).first()
+    if not practice:
+        raise HTTPException(status_code=404, detail=f"Practice problem {practice_id} not found")
+
+    if request.problem_items is not None:
+        practice.problem_items = request.problem_items
+    if request.problem_data is not None:
+        practice.problem_data = request.problem_data
+    if request.status is not None:
+        if request.status not in ("approved", "rejected", "pending"):
+            raise HTTPException(status_code=400, detail="Status must be one of: approved, rejected, pending")
+        practice.status = request.status
+
+    db.commit()
+    db.refresh(practice)
+
+    return {
+        "id": practice.id,
+        "user_id": practice.user_id,
+        "homework_id": practice.homework_id,
+        "group_id": practice.group_id,
+        "source": practice.source,
+        "status": practice.status,
+        "version_number": practice.version_number,
+        "problem_data": practice.problem_data,
+        "problem_items": practice.problem_items,
+        "weakness_summary": practice.weakness_summary,
+        "created_at": practice.created_at,
     }
