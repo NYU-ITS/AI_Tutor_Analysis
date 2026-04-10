@@ -50,7 +50,7 @@ def test_class_weakness_and_generate_practice(client, db_session, monkeypatch):
         practice_router,
         "ask",
         lambda prompt, system=None, **kwargs: json.dumps({
-            "problems": [{"number": 1, "text": "Practice derivative question", "topics": ["Derivatives"]}],
+            "problems": [{"number": 1, "text": "Practice derivative question", "topics": ["Derivatives"], "hint": "Use the chain rule", "answer": "f'(x)"}],
             "markdown": "**1.** Practice derivative question",
         }),
     )
@@ -89,7 +89,7 @@ def test_generate_practice_background_worker_persists_results(db_session, monkey
         practice_router,
         "ask",
         lambda prompt, system=None, **kwargs: json.dumps({
-            "problems": [{"number": 1, "text": "Practice Q", "topics": ["Derivatives"]}],
+            "problems": [{"number": 1, "text": "Practice Q", "topics": ["Derivatives"], "hint": "Hint text", "answer": "Answer text"}],
             "markdown": "**1.** Practice Q",
         }),
     )
@@ -109,7 +109,7 @@ def test_generate_practice_background_worker_persists_results(db_session, monkey
     assert saved.status == "pending"
     assert saved.version_number == 1
     assert saved.problem_data == "**1.** Practice Q"
-    assert saved.problem_items == [{"number": 1, "text": "Practice Q", "topics": ["Derivatives"]}]
+    assert saved.problem_items == [{"number": 1, "text": "Practice Q", "topics": ["Derivatives"], "hint": "Hint text", "answer": "Answer text"}]
 
 
 def test_class_weakness_returns_404_when_homework_missing(client):

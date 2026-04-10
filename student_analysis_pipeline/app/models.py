@@ -164,6 +164,6 @@ class TutorPracticeProblem(Base):
     status = Column(String, nullable=True)  # pending / approved / rejected
     version_number = Column(Integer, default=1)
     problem_data = Column(Text, nullable=True)  # generated practice problems in markdown
-    problem_items = Column(JSON, nullable=True)  # [{number, text, topics[]}] from LLM
+    problem_items = Column(JSON, nullable=True)  # [{number, text, topics[], hint, answer}] from LLM
     weakness_summary = Column(JSON, nullable=True)  # class weakness snapshot that drove generation
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

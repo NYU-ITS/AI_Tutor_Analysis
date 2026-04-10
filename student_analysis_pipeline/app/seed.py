@@ -121,7 +121,7 @@ DEFAULT_PROMPTS = [
             "Create new problems that test the same concepts differently.\n"
             "9. Tag each problem with 1-3 topic names drawn exactly from the topic mapping provided.\n\n"
             "Output a single JSON object with exactly two keys:\n"
-            "- \"problems\": array of objects, each with: \"number\" (int), \"text\" (the problem in Markdown), \"topics\" (array of topic name strings)\n"
+            "- \"problems\": array of objects, each with: \"number\" (int), \"text\" (the problem in Markdown), \"topics\" (array of topic name strings), \"hint\" (string), \"answer\" (string)\n"
             "- \"markdown\": the full problem set as clean Markdown (numbered **1.** **2.** etc.)\n\n"
             "Return ONLY valid JSON. No preamble, no code fences."
         ),

@@ -42,8 +42,8 @@ def _setup_practice_with_items(db_session):
         version_number=1,
         problem_data="**1.** Deriv Q\n**2.** Limits Q",
         problem_items=[
-            {"number": 1, "text": "Deriv Q", "topics": ["Derivatives"]},
-            {"number": 2, "text": "Limits Q", "topics": ["Limits"]},
+            {"number": 1, "text": "Deriv Q", "topics": ["Derivatives"], "hint": "Use the power rule", "answer": "2x"},
+            {"number": 2, "text": "Limits Q", "topics": ["Limits"], "hint": "Substitute directly", "answer": "5"},
         ],
         weakness_summary=[],
     )
@@ -87,7 +87,7 @@ def test_assign_practice_returns_400_when_no_analyses(client, db_session):
         status="approved",
         version_number=1,
         problem_data="text",
-        problem_items=[{"number": 1, "text": "Q", "topics": ["T"]}],
+        problem_items=[{"number": 1, "text": "Q", "topics": ["T"], "hint": "Hint", "answer": "A"}],
     )
     db_session.add(practice)
     db_session.commit()
@@ -150,8 +150,8 @@ def test_assign_practice_fallback_when_student_mastered_all(client, db_session):
         version_number=1,
         problem_data="text",
         problem_items=[
-            {"number": 1, "text": "Q1", "topics": ["Derivatives"]},
-            {"number": 2, "text": "Q2", "topics": ["Limits"]},
+            {"number": 1, "text": "Q1", "topics": ["Derivatives"], "hint": "H1", "answer": "A1"},
+            {"number": 2, "text": "Q2", "topics": ["Limits"], "hint": "H2", "answer": "A2"},
         ],
     )
     db_session.add(practice)
