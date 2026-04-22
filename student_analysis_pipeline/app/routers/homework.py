@@ -38,8 +38,10 @@ def get_homework(
             "model_id": hw.model_id,
             "question_uploaded": hw.question_uploaded_at is not None,
             "question_uploaded_at": hw.question_uploaded_at,
+            "question_pdf_name": hw.question_pdf_name,
             "answer_uploaded": hw.answer_uploaded_at is not None,
             "answer_uploaded_at": hw.answer_uploaded_at,
+            "answer_pdf_name": hw.answer_pdf_name,
             "answer_source": hw.answer_source,
             "topic_mapped": hw.topic_mapped_at is not None,
             "topic_mapped_at": hw.topic_mapped_at,
@@ -83,7 +85,7 @@ def _run_topic_mapping(hw: TutorHomework, db: Session) -> dict:
 
 
 def _run_pdf_to_markdown(
-    job_id: str, pdf_bytes: bytes, doc_type: str, group_id: str, model_id: str
+    job_id: str, pdf_bytes: bytes, doc_type: str, group_id: str, model_id: str, filename: str = None
 ) -> None:
     """Runs in the background. Opens its own DB session independent of the request."""
     db = SessionLocal()
@@ -139,10 +141,12 @@ def _run_pdf_to_markdown(
         if doc_type == "question":
             hw.question_data = markdown
             hw.question_uploaded_at = now
+            hw.question_pdf_name = filename
         else:
             hw.answer_data = markdown
             hw.answer_source = "uploaded"
             hw.answer_uploaded_at = now
+            hw.answer_pdf_name = filename
 
         db.commit()
         db.refresh(hw)
@@ -193,7 +197,7 @@ async def convert_pdf_to_markdown(
     db.commit()
     db.refresh(job)
 
-    background_tasks.add_task(_run_pdf_to_markdown, job.id, pdf_bytes, doc_type, group_id, model_id)
+    background_tasks.add_task(_run_pdf_to_markdown, job.id, pdf_bytes, doc_type, group_id, model_id, file.filename)
 
     return {
         "job_id": job.id,

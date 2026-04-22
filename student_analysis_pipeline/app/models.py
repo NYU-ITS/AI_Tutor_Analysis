@@ -48,6 +48,8 @@ class TutorHomework(Base):
     question_uploaded_at = Column(DateTime, nullable=True)
     answer_uploaded_at = Column(DateTime, nullable=True)
     topic_mapped_at = Column(DateTime, nullable=True)
+    question_pdf_name = Column(String, nullable=True)  # original question PDF filename
+    answer_pdf_name = Column(String, nullable=True)  # original answer PDF filename
 
 
 # ── Student Conversation Table ──
