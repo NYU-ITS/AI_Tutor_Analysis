@@ -21,10 +21,10 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 # ── Default error types (used when user hasn't defined custom ones) ──
 
 DEFAULT_ERROR_TYPES = [
-    {"name": "Conceptual", "description": "Wrong formula, misunderstood question, fundamental misunderstanding."},
-    {"name": "Procedural", "description": "Correct formula but wrong order, skipped steps, algebraic errors."},
-    {"name": "Computational", "description": "Arithmetic errors, sign errors."},
-    {"name": "Incomplete", "description": "Stopped working, conversation ended mid-problem."},
+    {"name": "Conceptual", "description": "Wrong formula, misunderstood question, fundamental misunderstanding.", "example": "Used division instead of multiplication when solving the equation"},
+    {"name": "Procedural", "description": "Correct formula but wrong order, skipped steps, algebraic errors.", "example": "Correct setup but forgot to distribute the negative sign"},
+    {"name": "Computational", "description": "Arithmetic errors, sign errors.", "example": "Calculated 5 * 3 = 16 instead of 15"},
+    {"name": "Incomplete", "description": "Stopped working, conversation ended mid-problem.", "example": "Student solved half the problem then stopped without finishing"},
 ]
 
 
@@ -88,7 +88,10 @@ def _build_error_type_prompt_section(error_types: list[dict]) -> str:
     """Build the error type section for the evaluation prompt."""
     lines = []
     for et in error_types:
-        lines.append(f"- **{et['name']}**: {et['description']}")
+        entry = f"- **{et['name']}**: {et['description']}"
+        if et.get("example"):
+            entry += f"\n  *Example*: {et['example']}"
+        lines.append(entry)
     return "\n".join(lines)
 
 
@@ -248,12 +251,12 @@ def get_error_types(
 def set_error_types(
     group_id: str = Query(..., description="Group ID"),
     error_types: list = Body(..., example=[
-        {"name": "Conceptual", "description": "Wrong formula, misunderstood question"},
-        {"name": "Procedural", "description": "Correct formula but wrong execution"},
+        {"name": "Conceptual", "description": "Wrong formula, misunderstood question", "example": "Student used addition instead of multiplication in the formula"},
+        {"name": "Procedural", "description": "Correct formula but wrong execution", "example": "Student set up the problem correctly but forgot to simplify at the end"},
     ]),
     db: Session = Depends(get_db),
 ):
-    """Set custom error types for a group. Each item needs 'name' and 'description'."""
+    """Set custom error types for a group. Each item needs 'name' and 'description'. 'example' is optional."""
     for et in error_types:
         if "name" not in et or "description" not in et:
             raise HTTPException(status_code=400, detail="Each error type must have 'name' and 'description'")

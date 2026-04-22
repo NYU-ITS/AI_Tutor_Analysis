@@ -117,7 +117,10 @@ class StudentQuestionEvaluation(Base):
 class TutorErrorType(Base):
     """User-defined error types per group.
 
-    data format: [{"name": "Conceptual", "description": "Wrong formula, misunderstood question"}, ...]
+    data format: [{"name": "Conceptual", "description": "...", "example": "..."}, ...]
+    - name: required, error type identifier
+    - description: required, detailed explanation
+    - example: optional, concrete example for LLM clarity
     """
     __tablename__ = "tutor_error_type"
 
