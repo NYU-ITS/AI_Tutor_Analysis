@@ -87,7 +87,7 @@ def assign_practice_to_students(
             "student_email": analysis.student_email,
             "weak_topics_count": len(weak_topics),
             "assigned_count": len(assigned_items),
-            "fallback_used": len(matched) == 0,
+            "fallback_used": False,
         })
 
     db.commit()

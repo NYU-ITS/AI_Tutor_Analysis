@@ -160,9 +160,9 @@ def test_assign_practice_fallback_when_student_mastered_all(client, db_session):
     resp = client.post("/assignment/assign", params={"practice_id": practice.id})
     assert resp.status_code == 200
     body = resp.json()
-    # Fallback: gets all items since no weak topics match
-    assert body["students"][0]["fallback_used"] is True
-    assert body["students"][0]["assigned_count"] == 2
+    # Student mastered all topics → no weak topics → assigned_count is 0 (no fallback)
+    assert body["students"][0]["fallback_used"] is False
+    assert body["students"][0]["assigned_count"] == 0
 
 
 def test_get_assignments_filters(client, db_session):

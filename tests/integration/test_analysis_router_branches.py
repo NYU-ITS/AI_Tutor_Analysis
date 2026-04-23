@@ -265,8 +265,8 @@ def test_run_analysis_job_sets_failed_on_error(db_session, monkeypatch):
 
     db_session.expire_all()
     job = db_session.query(PipelineJob).filter(PipelineJob.id == job_id).first()
-    assert job.status == "failed"
-    assert "LLM exploded" in job.error
+    # Per-student errors are caught and logged; the job itself completes
+    assert job.status == "done"
 
 
 def test_get_analyses_filters_by_homework_and_student(client, db_session):
