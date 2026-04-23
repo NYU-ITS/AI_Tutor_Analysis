@@ -56,3 +56,30 @@ def test_update_tutor_prompt_success_and_not_found(client):
 
     missing = client.put("/prompts/tutor/missing-id", json={"prompt": "x"})
     assert missing.status_code == 404
+
+
+def test_list_general_prompts_returns_seeded_defaults(client):
+    """Seeded default prompts should appear in GET /prompts/general."""
+    resp = client.get("/prompts/general")
+    assert resp.status_code == 200
+    rows = resp.json()
+    names = {row["name"] for row in rows}
+    # seed.DEFAULT_PROMPTS includes these at minimum — they must be present after reset.
+    assert "topic_mapping" in names
+    assert "evaluate_question" in names
+
+
+def test_list_tutor_prompts_filters_by_group(client):
+    """GET /prompts/tutor?group_id=X must scope results to that group only."""
+    # Create two tutor prompts in different groups.
+    a = client.post("/prompts/tutor", json={"name": "topic_mapping", "group_id": "group-alpha", "prompt": "alpha"})
+    b = client.post("/prompts/tutor", json={"name": "topic_mapping", "group_id": "group-beta",  "prompt": "beta"})
+    assert a.status_code == 200 and b.status_code == 200
+
+    unfiltered = client.get("/prompts/tutor").json()
+    assert len(unfiltered) >= 2
+
+    only_alpha = client.get("/prompts/tutor", params={"group_id": "group-alpha"}).json()
+    assert len(only_alpha) == 1
+    assert only_alpha[0]["group_id"] == "group-alpha"
+    assert only_alpha[0]["prompt"] == "alpha"

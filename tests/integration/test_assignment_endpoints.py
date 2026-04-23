@@ -187,3 +187,69 @@ def test_get_assignments_filters(client, db_session):
     # Filter by practice_problem_id
     by_practice = client.get("/assignment/", params={"practice_problem_id": practice.id})
     assert len(by_practice.json()) == 2
+
+
+def test_get_assignments_topic_filter_returns_only_assignments_with_matching_item(client, db_session):
+    """The `topic` query param filters returned assignments to those containing
+    at least one item that covers the requested topic. Non-matching assignments
+    are skipped entirely."""
+    hw, practice, s1, s2 = _setup_practice_with_items(db_session)
+    client.post("/assignment/assign", params={"practice_id": practice.id})
+
+    # s1 got the Derivatives item; s2 got the Limits item.
+    derivs = client.get("/assignment/", params={"topic": "Derivatives"}).json()
+    assert len(derivs) == 1
+    assert derivs[0]["student_id"] == "s1"
+
+    limits = client.get("/assignment/", params={"topic": "Limits"}).json()
+    assert len(limits) == 1
+    assert limits[0]["student_id"] == "s2"
+
+
+def test_get_assignments_topic_filter_narrows_assigned_items_to_topic(client, db_session):
+    """When a topic matches, the returned `assigned_items` must be narrowed to
+    only items containing that topic (not the full assignment)."""
+    hw = TutorHomework(group_id="g-tf", model_id="m-tf", question_data="q",
+                       topic_mapping={"1": ["Derivatives"], "2": ["Limits"]})
+    db_session.add(hw)
+    db_session.flush()
+
+    sa = StudentAnalysis(student_id="s1", student_email="s1@example.edu", homework_id=hw.id)
+    db_session.add(sa)
+    db_session.flush()
+    db_session.add_all([
+        StudentTopicPerformance(student_analysis_id=sa.id, topic_name="Derivatives", status="needs_practice"),
+        StudentTopicPerformance(student_analysis_id=sa.id, topic_name="Limits",       status="needs_practice"),
+    ])
+
+    practice = TutorPracticeProblem(
+        homework_id=hw.id,
+        group_id=hw.group_id,
+        status="approved",
+        version_number=1,
+        problem_data="x",
+        problem_items=[
+            {"number": 1, "text": "Deriv Q", "topics": ["Derivatives"],  "hint": "h", "answer": "a"},
+            {"number": 2, "text": "Lim Q",   "topics": ["Limits"],       "hint": "h", "answer": "a"},
+        ],
+    )
+    db_session.add(practice)
+    db_session.commit()
+
+    client.post("/assignment/assign", params={"practice_id": practice.id})
+
+    resp = client.get("/assignment/", params={"topic": "Derivatives"}).json()
+    assert len(resp) == 1
+    assert resp[0]["assigned_count"] == 1
+    assert len(resp[0]["assigned_items"]) == 1
+    assert resp[0]["assigned_items"][0]["text"] == "Deriv Q"
+
+
+def test_get_assignments_topic_filter_omits_assignments_with_no_matching_item(client, db_session):
+    """A completely non-matching topic returns an empty list rather than
+    assignments with empty assigned_items."""
+    hw, practice, s1, s2 = _setup_practice_with_items(db_session)
+    client.post("/assignment/assign", params={"practice_id": practice.id})
+
+    resp = client.get("/assignment/", params={"topic": "Integration"}).json()
+    assert resp == []

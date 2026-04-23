@@ -102,3 +102,34 @@ def test_aggregate_metrics_handles_question_with_no_topics():
     assert result["total_attempted"] == 1
     assert result["total_solved"] == 1
     assert result["topic_performances"] == []
+
+
+def test_parse_questions_returns_empty_on_empty_markdown():
+    assert _parse_questions_from_markdown("") == {}
+
+
+def test_parse_questions_returns_empty_when_no_numbered_pattern_matches():
+    markdown = "Just some prose with no numbering at all.\nAnother paragraph."
+    assert _parse_questions_from_markdown(markdown) == {}
+
+
+def test_parse_answers_returns_empty_when_no_pattern_matches():
+    assert _parse_answers_from_markdown("") == {}
+    assert _parse_answers_from_markdown("no answer structure here") == {}
+
+
+def test_aggregate_metrics_marks_topic_as_mastered_when_all_solved():
+    """Topic with every mapped question solved is classified 'mastered' with the
+    reason 'All questions attempted and solved correctly'."""
+    result = _aggregate_metrics(
+        evaluations={
+            "1": {"attempted": True, "solved": True, "error_type": None},
+            "2": {"attempted": True, "solved": True, "error_type": None},
+        },
+        topic_mapping={"1": ["Derivatives"], "2": ["Derivatives"]},
+    )
+    topics = {t["topic_name"]: t for t in result["topic_performances"]}
+    assert topics["Derivatives"]["status"] == "mastered"
+    assert topics["Derivatives"]["question_tested"] == 2
+    assert topics["Derivatives"]["questions_solved"] == 2
+    assert "All questions attempted and solved correctly" in topics["Derivatives"]["reason"]

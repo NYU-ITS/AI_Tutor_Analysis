@@ -145,6 +145,64 @@ def test_run_pdf_to_markdown_answer_updates_existing_homework(db_session, monkey
     assert hw.answer_uploaded_at is not None
 
 
+def test_run_pdf_to_markdown_chunks_large_pdf_with_overlap_prompt(db_session, monkeypatch):
+    """PDFs with >5 pages must be processed in 5-page chunks, and every chunk
+    after the first must receive an overlap page with the dedicated overlap
+    prompt. Verifies the branch at lines 106-127 of homework.py."""
+    fake_pages = [
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,PAGE_{n}"}}
+        for n in range(7)  # 7 pages → 2 chunks: [0..4] then [4..6]
+    ]
+    monkeypatch.setattr(homework_router, "pdf_to_images", lambda pdf_bytes: fake_pages)
+    monkeypatch.setattr(homework_router, "get_prompt", lambda db, name, group_id=None: f"{name}-prompt")
+    monkeypatch.setattr(
+        homework_router,
+        "ask",
+        lambda prompt, system=None, **kwargs: json.dumps({"1": ["Derivatives"]}),
+    )
+
+    captured_calls = []
+
+    def fake_ask_with_images(prompt, image_urls, system=None, **kwargs):
+        captured_calls.append({"prompt": prompt, "image_urls": image_urls})
+        return f"chunk-of-{len(image_urls)}-pages"
+
+    monkeypatch.setattr(homework_router, "ask_with_images", fake_ask_with_images)
+
+    job = PipelineJob(step="pdf_to_markdown")
+    db_session.add(job)
+    db_session.commit()
+    job_id = job.id
+
+    _run_pdf_to_markdown(job_id, b"%PDF-big", "question", "group-big", "model-big")
+
+    db_session.expire_all()
+    job = db_session.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+    assert job.status == "done"
+
+    # Two chunk calls for 7 pages at chunk_size=5 with overlap.
+    assert len(captured_calls) == 2
+    first, second = captured_calls
+
+    # First chunk: pages 0..4 (5 pages), no overlap notice.
+    assert len(first["image_urls"]) == 5
+    assert first["image_urls"][0]["image_url"]["url"].endswith("PAGE_0")
+    assert "overlap page" not in first["prompt"]
+
+    # Second chunk: overlap page (page 4) + pages 5, 6 → 3 pages total.
+    # Uses the dedicated overlap prompt that tells the LLM to treat the first image as context.
+    assert len(second["image_urls"]) == 3
+    assert second["image_urls"][0]["image_url"]["url"].endswith("PAGE_4")
+    assert "overlap page" in second["prompt"]
+    assert "SECOND image onwards" in second["prompt"]
+
+    # Chunks are joined by blank lines in the final markdown.
+    hw = db_session.query(TutorHomework).filter(
+        TutorHomework.group_id == "group-big", TutorHomework.model_id == "model-big"
+    ).first()
+    assert hw.question_data == "chunk-of-5-pages\n\nchunk-of-3-pages"
+
+
 def test_run_pdf_to_markdown_sets_failed_on_error(db_session, monkeypatch):
     """Background worker sets job to failed if an exception occurs."""
     monkeypatch.setattr(homework_router, "pdf_to_images", lambda pdf_bytes: (_ for _ in ()).throw(RuntimeError("PDF parse error")))

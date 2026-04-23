@@ -141,6 +141,85 @@ def test_export_conversations_upserts_existing_row(client, db_session, monkeypat
     assert db_session.query(StudentConversation).filter(StudentConversation.homework_id == hw.id).count() == 1
 
 
+def test_export_conversations_parses_meta_when_stored_as_json_string(client, db_session, monkeypatch):
+    """meta may be persisted as a JSON string; the router must json.loads() it
+    before reading the 'models' key (conversation.py lines 117-121)."""
+    hw = TutorHomework(group_id="group-meta", model_id="model-meta")
+    db_session.add(hw)
+    db_session.commit()
+
+    group = Obj(id="group-meta", user_ids=["student-1"])
+    user = Obj(id="student-1", email="s1@example.edu")
+    # meta stored as a JSON string, not a dict.
+    chat = Obj(
+        id="chat-meta",
+        user_id="student-1",
+        title="Chat meta-as-string",
+        meta=json.dumps({"models": ["model-meta"]}),
+        chat={"history": {"messages": {"m1": {"role": "user", "content": "hello", "timestamp": 1}}}},
+        created_at=1,
+        archived=False,
+    )
+
+    monkeypatch.setattr(
+        conversation_router,
+        "OwuiSessionLocal",
+        lambda: FakeOwuiSession(group_obj=group, chat_user_rows=[(chat, user)]),
+    )
+
+    resp = client.post("/conversation/export", params={"homework_id": hw.id})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "success"
+    assert body["total_students"] == 1
+
+    row = (
+        db_session.query(StudentConversation)
+        .filter(StudentConversation.homework_id == hw.id)
+        .first()
+    )
+    assert row is not None
+    assert "hello" in row.conversation_markdown
+
+
+def test_export_conversations_falls_back_to_unknown_email_when_user_email_none(client, db_session, monkeypatch):
+    """When a user's email is None the router substitutes 'unknown_{uid}'
+    (conversation.py line 158) instead of failing or persisting None."""
+    hw = TutorHomework(group_id="group-noemail", model_id="model-noemail")
+    db_session.add(hw)
+    db_session.commit()
+
+    group = Obj(id="group-noemail", user_ids=["student-noemail"])
+    user = Obj(id="student-noemail", email=None)
+    chat = Obj(
+        id="chat-noemail",
+        user_id="student-noemail",
+        title="anon",
+        meta={"models": ["model-noemail"]},
+        chat={"history": {"messages": {"m1": {"role": "user", "content": "hi", "timestamp": 1}}}},
+        created_at=1,
+        archived=False,
+    )
+    monkeypatch.setattr(
+        conversation_router,
+        "OwuiSessionLocal",
+        lambda: FakeOwuiSession(group_obj=group, chat_user_rows=[(chat, user)]),
+    )
+
+    resp = client.post("/conversation/export", params={"homework_id": hw.id})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_students"] == 1
+    assert body["students"][0]["student_email"] == "unknown_student-noemail"
+
+    row = (
+        db_session.query(StudentConversation)
+        .filter(StudentConversation.homework_id == hw.id)
+        .first()
+    )
+    assert row.student_email == "unknown_student-noemail"
+
+
 def test_get_conversations_filters_by_homework_and_student(client, db_session):
     hw1 = TutorHomework(group_id="g1", model_id="m1")
     hw2 = TutorHomework(group_id="g2", model_id="m2")

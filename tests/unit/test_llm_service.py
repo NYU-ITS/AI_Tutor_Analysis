@@ -115,6 +115,47 @@ def test_ask_constructs_messages(monkeypatch):
     assert captured["kwargs"]["temperature"] == 0.1
 
 
+def test_chat_retries_on_http_error_then_succeeds(monkeypatch):
+    """An HTTP error from raise_for_status() is caught via RequestException and retried."""
+    calls = {"count": 0}
+    sleeps = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):  # noqa: A002
+        calls["count"] += 1
+        if calls["count"] < 2:
+            return _FakeResponse(raise_error=requests.exceptions.HTTPError("500 server error"))
+        return _FakeResponse(payload={"choices": [{"message": {"content": "recovered"}}]})
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    out = llm.chat(messages=[{"role": "user", "content": "hi"}], max_retries=3)
+    assert out == "recovered"
+    assert calls["count"] == 2
+    assert sleeps == [1]  # 2^0 = 1 second between attempt 1 and 2
+
+
+def test_chat_forwards_response_format_and_extra_kwargs_to_payload(monkeypatch):
+    """Extra kwargs (including response_format) must land in the JSON payload."""
+    captured = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):  # noqa: A002
+        captured["json"] = json
+        return _FakeResponse(payload={"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+
+    llm.chat(
+        messages=[{"role": "user", "content": "hi"}],
+        response_format={"type": "json_object"},
+        max_tokens=500,
+    )
+
+    assert captured["json"]["response_format"] == {"type": "json_object"}
+    assert captured["json"]["max_tokens"] == 500
+    assert captured["json"]["temperature"] == 0.0  # default preserved
+
+
 def test_ask_with_images_constructs_multimodal_message(monkeypatch):
     captured = {}
 
