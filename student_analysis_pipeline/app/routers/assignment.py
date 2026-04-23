@@ -65,8 +65,7 @@ def assign_practice_to_students(
             item for item in practice.problem_items
             if set(item.get("topics", [])) & weak_topics
         ]
-        # Fallback: student mastered all topics → assign all problems
-        assigned_items = matched if matched else practice.problem_items
+        assigned_items = matched
 
         # Upsert: delete existing assignment for this student + practice, then re-insert
         db.query(StudentPracticeAssignment).filter(

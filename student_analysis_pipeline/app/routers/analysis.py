@@ -334,66 +334,75 @@ def _run_analysis_job(job_id: str, homework_id: str, student_id: Optional[str]) 
         now = datetime.now(timezone.utc)
 
         for conv in conversations:
-            chat_history = conv.conversation_markdown or ""
-            evaluations = _evaluate_all_questions(questions, answers, chat_history, eval_prompt)
-            metrics = _aggregate_metrics(evaluations, topic_mapping)
+            try:
+                chat_history = conv.conversation_markdown or ""
+                evaluations = _evaluate_all_questions(questions, answers, chat_history, eval_prompt)
+                metrics = _aggregate_metrics(evaluations, topic_mapping)
 
-            analysis = (
-                db.query(StudentAnalysis)
-                .filter(
-                    StudentAnalysis.student_id == conv.student_id,
-                    StudentAnalysis.homework_id == homework_id,
+                analysis = (
+                    db.query(StudentAnalysis)
+                    .filter(
+                        StudentAnalysis.student_id == conv.student_id,
+                        StudentAnalysis.homework_id == homework_id,
+                    )
+                    .first()
                 )
-                .first()
-            )
-            if not analysis:
-                analysis = StudentAnalysis(
-                    student_id=conv.student_id,
-                    student_email=conv.student_email,
-                    homework_id=homework_id,
+                if not analysis:
+                    analysis = StudentAnalysis(
+                        student_id=conv.student_id,
+                        student_email=conv.student_email,
+                        homework_id=homework_id,
+                    )
+                    db.add(analysis)
+
+                analysis.total_question = metrics["total_question"]
+                analysis.total_attempted = metrics["total_attempted"]
+                analysis.total_solved = metrics["total_solved"]
+                analysis.total_errors = metrics["total_errors"]
+                analysis.created_at = now
+                db.flush()
+
+                db.query(StudentQuestionEvaluation).filter(
+                    StudentQuestionEvaluation.student_analysis_id == analysis.id
+                ).delete()
+                db.query(StudentTopicPerformance).filter(
+                    StudentTopicPerformance.student_analysis_id == analysis.id
+                ).delete()
+
+                for q_num, eval_result in evaluations.items():
+                    attempted = eval_result.get("attempted", False)
+                    solved = eval_result.get("solved", False)
+                    error_type = eval_result.get("error_type")
+                    if not attempted:
+                        error_type = "Not Attempted"
+                    db.add(StudentQuestionEvaluation(
+                        student_analysis_id=analysis.id,
+                        question_number=int(q_num),
+                        attempted=attempted,
+                        solved=solved,
+                        error_type=error_type,
+                    ))
+
+                for tp in metrics["topic_performances"]:
+                    db.add(StudentTopicPerformance(
+                        student_analysis_id=analysis.id,
+                        topic_name=tp["topic_name"],
+                        status=tp["status"],
+                        question_tested=tp["question_tested"],
+                        questions_solved=tp["questions_solved"],
+                        details=tp["details"],
+                        reason=tp["reason"],
+                    ))
+
+                db.commit()
+
+            except Exception as student_error:
+                db.rollback()
+                import logging
+                logging.getLogger(__name__).error(
+                    "Analysis failed for student %s: %s", conv.student_id, student_error
                 )
-                db.add(analysis)
-
-            analysis.total_question = metrics["total_question"]
-            analysis.total_attempted = metrics["total_attempted"]
-            analysis.total_solved = metrics["total_solved"]
-            analysis.total_errors = metrics["total_errors"]
-            analysis.created_at = now
-            db.flush()
-
-            db.query(StudentQuestionEvaluation).filter(
-                StudentQuestionEvaluation.student_analysis_id == analysis.id
-            ).delete()
-            db.query(StudentTopicPerformance).filter(
-                StudentTopicPerformance.student_analysis_id == analysis.id
-            ).delete()
-
-            for q_num, eval_result in evaluations.items():
-                attempted = eval_result.get("attempted", False)
-                solved = eval_result.get("solved", False)
-                error_type = eval_result.get("error_type")
-                if not attempted:
-                    error_type = "Not Attempted"
-                db.add(StudentQuestionEvaluation(
-                    student_analysis_id=analysis.id,
-                    question_number=int(q_num),
-                    attempted=attempted,
-                    solved=solved,
-                    error_type=error_type,
-                ))
-
-            for tp in metrics["topic_performances"]:
-                db.add(StudentTopicPerformance(
-                    student_analysis_id=analysis.id,
-                    topic_name=tp["topic_name"],
-                    status=tp["status"],
-                    question_tested=tp["question_tested"],
-                    questions_solved=tp["questions_solved"],
-                    details=tp["details"],
-                    reason=tp["reason"],
-                ))
-
-            db.commit()
+                continue
 
         job.status = "done"
         job.finished_at = datetime.now(timezone.utc)
