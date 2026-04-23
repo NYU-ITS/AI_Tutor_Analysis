@@ -152,7 +152,13 @@ def _aggregate_metrics(
     topic_mapping: dict[str, list[str]],
 ) -> dict:
     """Aggregate per-question evaluations into summary + topic performance."""
-    total_questions = 0
+    # Calculate total questions from topic_mapping (consistent across students)
+    # instead of from evaluations (which may vary per-student)
+    total_questions = sum(
+        1 for topics in topic_mapping.values()
+        if not any("Visual/Image-based" in t for t in topics)
+    )
+
     total_attempted = 0
     total_solved = 0
     total_errors = 0
@@ -165,8 +171,6 @@ def _aggregate_metrics(
         is_visual = any("Visual/Image-based" in t for t in topics)
         if is_visual:
             continue
-
-        total_questions += 1
 
         if eval_result["attempted"]:
             total_attempted += 1
@@ -337,6 +341,13 @@ def _run_analysis_job(job_id: str, homework_id: str, student_id: Optional[str]) 
             try:
                 chat_history = conv.conversation_markdown or ""
                 evaluations = _evaluate_all_questions(questions, answers, chat_history, eval_prompt)
+
+                # Ensure evaluations are complete: add default entries for any missing questions
+                # (LLM might fail to evaluate a question if it can't find evidence in conversation)
+                for q_num in questions.keys():
+                    if q_num not in evaluations:
+                        evaluations[q_num] = {"attempted": False, "solved": False, "error_type": "Not Attempted"}
+
                 metrics = _aggregate_metrics(evaluations, topic_mapping)
 
                 analysis = (
@@ -369,10 +380,13 @@ def _run_analysis_job(job_id: str, homework_id: str, student_id: Optional[str]) 
                     StudentTopicPerformance.student_analysis_id == analysis.id
                 ).delete()
 
-                for q_num, eval_result in evaluations.items():
-                    attempted = eval_result.get("attempted", False)
-                    solved = eval_result.get("solved", False)
-                    error_type = eval_result.get("error_type")
+                # Create evaluation records for ALL non-visual questions (even if LLM didn't evaluate them)
+                # to ensure data integrity: total_question count matches evaluation record count
+                for q_num in sorted(questions.keys(), key=int):
+                    eval_result = evaluations.get(q_num, {})
+                    attempted = eval_result.get("attempted", False) if eval_result else False
+                    solved = eval_result.get("solved", False) if eval_result else False
+                    error_type = eval_result.get("error_type") if eval_result else None
                     if not attempted:
                         error_type = "Not Attempted"
                     db.add(StudentQuestionEvaluation(
