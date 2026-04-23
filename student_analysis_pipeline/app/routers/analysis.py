@@ -552,9 +552,15 @@ def export_analysis_pdf(
         ],
     }
 
-    # Generate PDF with homework name (extracted from homework_id or use default)
-    homework_name = f"Homework {sa.homework_id[-1]}" if sa.homework_id else "Homework"
-    pdf_buffer = generate_analysis_pdf(analysis_data, homework_name=homework_name)
+    # Extract homework name and model_id from TutorHomework
+    homework_name = "Homework"
+    model_name = ""
+    if sa.homework_id:
+        hw = db.query(TutorHomework).filter(TutorHomework.id == sa.homework_id).first()
+        if hw and hw.model_id:
+            homework_name = hw.model_id
+            model_name = hw.model_id
+    pdf_buffer = generate_analysis_pdf(analysis_data, homework_name=homework_name, creator_email=sa.student_email or "", model_name=model_name)
 
     return StreamingResponse(
         iter([pdf_buffer.getvalue()]),
@@ -585,8 +591,13 @@ def export_homework_analyses(
     if not analyses:
         raise HTTPException(status_code=404, detail=f"No analyses found for homework {homework_id}")
 
-    # Extract homework name from homework_id
-    homework_name = f"Homework {homework_id[-1]}" if homework_id else "Homework"
+    # Extract homework name and model_id from TutorHomework
+    homework_name = "Homework"
+    model_name = ""
+    hw = db.query(TutorHomework).filter(TutorHomework.id == homework_id).first()
+    if hw and hw.model_id:
+        homework_name = hw.model_id
+        model_name = hw.model_id
 
     # Create zip file
     zip_buffer = BytesIO()
@@ -616,8 +627,8 @@ def export_homework_analyses(
                 ],
             }
 
-            # Generate PDF with homework name
-            pdf_buffer = generate_analysis_pdf(analysis_data, homework_name=homework_name)
+            # Generate PDF with homework name and student email
+            pdf_buffer = generate_analysis_pdf(analysis_data, homework_name=homework_name, creator_email=sa.student_email or "", model_name=model_name)
             zip_file.writestr(f"{sa.student_email}_{homework_name.lower().replace(' ', '')}_analysis.pdf", pdf_buffer.getvalue())
 
     zip_buffer.seek(0)

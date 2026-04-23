@@ -10,12 +10,14 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 
 
-def generate_analysis_pdf(analysis_data: dict, homework_name: str = "Homework") -> BytesIO:
+def generate_analysis_pdf(analysis_data: dict, homework_name: str = "Homework", creator_email: str = "", model_name: str = "") -> BytesIO:
     """Generate a formatted PDF report from student analysis data.
 
     Args:
         analysis_data: Dict with student analysis including metrics, evaluations, and topic performances
         homework_name: Name/number of the homework (e.g., "Homework 8", "Assignment 3")
+        creator_email: Email of the student/creator
+        model_name: Name of the AI model/tutor
 
     Returns:
         BytesIO object containing the PDF
@@ -170,10 +172,10 @@ def generate_analysis_pdf(analysis_data: dict, homework_name: str = "Homework") 
     story.append(Spacer(1, 0.2*inch))
     footer_text = (
         "This report was generated from <b>NYU PilotGenAI Application</b> based on chat "
-        "interactions with <b>MathAlly</b>(AI Tutor) created by Selin Kalaycioglu for "
-        "<b>MATH UA 121 - Calculus Fall 2025</b><br/>"
+        "interactions with <b>AI Tutor</b> created by <b>{}</b> for "
+        "<b>{}</b><br/>"
         "<i>Disclaimer : All graphical questions are excluded from this analysis</i>"
-    )
+    ).format(creator_email, model_name)
     story.append(Paragraph(footer_text, ParagraphStyle(
         'Footer',
         parent=styles['Normal'],
