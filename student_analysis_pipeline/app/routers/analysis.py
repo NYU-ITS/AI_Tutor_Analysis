@@ -147,6 +147,32 @@ def _evaluate_all_questions(
     return json.loads(response)
 
 
+def _backfill_missing_evaluations(
+    evaluations: dict[str, dict],
+    expected_q_nums: list[str],
+) -> dict[str, dict]:
+    """Ensure every expected question has an evaluation entry.
+
+    The LLM may omit keys; missing non-visual questions default to Not Attempted.
+    """
+    default = {"attempted": False, "solved": False, "error_type": "Not Attempted"}
+    out: dict[str, dict] = {}
+    for q in expected_q_nums:
+        key = str(q)
+        if key in evaluations and isinstance(evaluations[key], dict):
+            er = dict(evaluations[key])
+            if "attempted" not in er:
+                er["attempted"] = False
+            if "solved" not in er:
+                er["solved"] = False
+            if not er.get("attempted"):
+                er["error_type"] = "Not Attempted"
+            out[key] = er
+        else:
+            out[key] = dict(default)
+    return out
+
+
 def _aggregate_metrics(
     evaluations: dict[str, dict],
     topic_mapping: dict[str, list[str]],
@@ -341,13 +367,8 @@ def _run_analysis_job(job_id: str, homework_id: str, student_id: Optional[str]) 
             try:
                 chat_history = conv.conversation_markdown or ""
                 evaluations = _evaluate_all_questions(questions, answers, chat_history, eval_prompt)
-
-                # Ensure evaluations are complete: add default entries for any missing questions
-                # (LLM might fail to evaluate a question if it can't find evidence in conversation)
-                for q_num in questions.keys():
-                    if q_num not in evaluations:
-                        evaluations[q_num] = {"attempted": False, "solved": False, "error_type": "Not Attempted"}
-
+                expected_keys = sorted(questions.keys(), key=int)
+                evaluations = _backfill_missing_evaluations(evaluations, expected_keys)
                 metrics = _aggregate_metrics(evaluations, topic_mapping)
 
                 analysis = (
