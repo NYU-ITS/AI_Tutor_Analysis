@@ -57,6 +57,31 @@ def test_run_analysis_returns_404_when_no_conversations(client, db_session):
     assert "No student conversations found" in resp.json()["detail"]
 
 
+def test_run_analysis_returns_404_when_student_conversation_missing(client, db_session):
+    hw = TutorHomework(
+        group_id="g-student-missing",
+        model_id="m-student-missing",
+        question_data="**1.** Q1",
+        answer_data="**1.** A1",
+        topic_mapping={"1": ["Derivatives"]},
+    )
+    db_session.add(hw)
+    db_session.flush()
+    db_session.add(
+        StudentConversation(
+            student_id="student-present",
+            student_email="present@example.edu",
+            homework_id=hw.id,
+            conversation_markdown="chat",
+        )
+    )
+    db_session.commit()
+
+    resp = client.post("/analysis/run", params={"homework_id": hw.id, "student_id": "student-missing"})
+    assert resp.status_code == 404
+    assert "No student conversations found" in resp.json()["detail"]
+
+
 def test_run_analysis_auto_generates_answers_when_missing(db_session, monkeypatch):
     """Background worker auto-generates answers when homework has no answer_data."""
     hw = TutorHomework(
@@ -101,6 +126,123 @@ def test_run_analysis_auto_generates_answers_when_missing(db_session, monkeypatc
 
     job = db_session.query(PipelineJob).filter(PipelineJob.id == job.id).first()
     assert job.status == "done"
+
+
+def test_run_analysis_backfills_missing_question_evaluations(db_session, monkeypatch):
+    """When LLM omits a non-visual question, worker stores a default Not Attempted evaluation."""
+    hw = TutorHomework(
+        group_id="g-backfill",
+        model_id="m-backfill",
+        question_data="**1.** Q1\n**2.** Q2",
+        answer_data="**1.** A1\n\n**2.** A2",
+        topic_mapping={"1": ["Derivatives"], "2": ["Integrals"]},
+    )
+    db_session.add(hw)
+    db_session.flush()
+    db_session.add(
+        StudentConversation(
+            student_id="student-backfill",
+            student_email="backfill@example.edu",
+            homework_id=hw.id,
+            conversation_markdown="chat",
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(analysis_router, "get_prompt", lambda db, name, group_id=None: "eval-prompt")
+    monkeypatch.setattr(
+        analysis_router,
+        "ask",
+        lambda prompt, system=None, **kwargs: json.dumps(
+            {"1": {"attempted": True, "solved": False, "error_type": "Procedural"}}
+        ),
+    )
+
+    job = PipelineJob(step="run_analysis", homework_id=hw.id)
+    db_session.add(job)
+    db_session.commit()
+
+    _run_analysis_job(job.id, hw.id, None)
+
+    db_session.expire_all()
+    analysis_row = (
+        db_session.query(StudentAnalysis)
+        .filter(StudentAnalysis.student_id == "student-backfill", StudentAnalysis.homework_id == hw.id)
+        .first()
+    )
+    assert analysis_row is not None
+
+    eval_rows = (
+        db_session.query(StudentQuestionEvaluation)
+        .filter(StudentQuestionEvaluation.student_analysis_id == analysis_row.id)
+        .order_by(StudentQuestionEvaluation.question_number.asc())
+        .all()
+    )
+    assert len(eval_rows) == 2
+    assert eval_rows[0].question_number == 1
+    assert eval_rows[0].attempted is True
+    assert eval_rows[0].error_type == "Procedural"
+    assert eval_rows[1].question_number == 2
+    assert eval_rows[1].attempted is False
+    assert eval_rows[1].error_type == "Not Attempted"
+
+
+def test_run_analysis_job_honors_student_filter(db_session, monkeypatch):
+    """Background worker analyzes only the requested student when student_id is supplied."""
+    hw = TutorHomework(
+        group_id="g-student-filter",
+        model_id="m-student-filter",
+        question_data="**1.** Q1",
+        answer_data="**1.** A1",
+        topic_mapping={"1": ["Derivatives"]},
+    )
+    db_session.add(hw)
+    db_session.flush()
+    db_session.add_all(
+        [
+            StudentConversation(
+                student_id="student-include",
+                student_email="include@example.edu",
+                homework_id=hw.id,
+                conversation_markdown="chat include",
+            ),
+            StudentConversation(
+                student_id="student-exclude",
+                student_email="exclude@example.edu",
+                homework_id=hw.id,
+                conversation_markdown="chat exclude",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(analysis_router, "get_prompt", lambda db, name, group_id=None: "eval-prompt")
+    monkeypatch.setattr(
+        analysis_router,
+        "ask",
+        lambda prompt, system=None, **kwargs: json.dumps(
+            {"1": {"attempted": True, "solved": True, "error_type": None}}
+        ),
+    )
+
+    job = PipelineJob(step="run_analysis", homework_id=hw.id, student_id="student-include")
+    db_session.add(job)
+    db_session.commit()
+    _run_analysis_job(job.id, hw.id, "student-include")
+
+    db_session.expire_all()
+    included = (
+        db_session.query(StudentAnalysis)
+        .filter(StudentAnalysis.student_id == "student-include", StudentAnalysis.homework_id == hw.id)
+        .first()
+    )
+    excluded = (
+        db_session.query(StudentAnalysis)
+        .filter(StudentAnalysis.student_id == "student-exclude", StudentAnalysis.homework_id == hw.id)
+        .first()
+    )
+    assert included is not None
+    assert excluded is None
 
 
 def test_run_analysis_marks_unattempted_and_skips_visual(db_session, monkeypatch):
@@ -269,6 +411,21 @@ def test_run_analysis_job_sets_failed_on_error(db_session, monkeypatch):
     assert job.status == "done"
 
 
+def test_run_analysis_job_sets_failed_when_homework_lookup_fails(db_session):
+    """Outer exception path marks the pipeline job as failed."""
+    job = PipelineJob(step="run_analysis", homework_id="missing-hw")
+    db_session.add(job)
+    db_session.commit()
+    job_id = job.id
+
+    _run_analysis_job(job_id, "missing-hw", None)
+
+    db_session.expire_all()
+    job = db_session.query(PipelineJob).filter(PipelineJob.id == job_id).first()
+    assert job.status == "failed"
+    assert job.error is not None
+
+
 def test_get_analyses_filters_by_homework_and_student(client, db_session):
     hw1 = TutorHomework(group_id="g1", model_id="m1")
     hw2 = TutorHomework(group_id="g2", model_id="m2")
@@ -292,3 +449,18 @@ def test_get_analyses_filters_by_homework_and_student(client, db_session):
 
     by_student = client.get("/analysis/", params={"student_id": "s1"}).json()
     assert len(by_student) == 2
+
+
+def test_get_analyses_filters_by_analysis_id(client, db_session):
+    hw = TutorHomework(group_id="g-filter-id", model_id="m-filter-id")
+    db_session.add(hw)
+    db_session.flush()
+
+    first = StudentAnalysis(student_id="sid-1", student_email="sid1@example.edu", homework_id=hw.id)
+    second = StudentAnalysis(student_id="sid-2", student_email="sid2@example.edu", homework_id=hw.id)
+    db_session.add_all([first, second])
+    db_session.commit()
+
+    filtered = client.get("/analysis/", params={"analysis_id": first.id}).json()
+    assert len(filtered) == 1
+    assert filtered[0]["id"] == first.id

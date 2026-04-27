@@ -7,6 +7,8 @@ These tests call the real Portkey API. They verify that:
 
 Run with: pytest -m live
 Requires: PORTKEY_API_KEY and PORTKEY_BASE_URL set in .env or environment.
+
+Optional: LLM_TEST_MODEL — short name (e.g. gpt-4o-mini) or full Portkey id; defaults to app DEFAULT_MODEL.
 """
 
 import json
@@ -22,6 +24,7 @@ from app.services.llm import (
     ask_with_images,
     chat,
 )
+from tests.helpers import get_llm_test_model, portkey_model_id_for_tests
 
 
 pytestmark = pytest.mark.live
@@ -46,7 +49,7 @@ class TestPortkeyConnectivity:
             "Content-Type": "application/json",
         }
         payload = {
-            "model": "@gpt-4o/gpt-4o",
+            "model": portkey_model_id_for_tests(),
             "messages": [{"role": "user", "content": "Reply with the single word: OK"}],
             "temperature": 0,
             "max_tokens": 5,
@@ -70,7 +73,7 @@ class TestPortkeyConnectivity:
         """Verify the ask() helper returns a non-empty string from the real gateway."""
         result = ask(
             prompt="Reply with the single word: OK",
-            model="gpt-4o",
+            model=get_llm_test_model(),
             max_tokens=5,
         )
         assert isinstance(result, str)
@@ -83,7 +86,7 @@ class TestPortkeyConnectivity:
                 {"role": "system", "content": "You are a JSON-only responder."},
                 {"role": "user", "content": 'Return this exact JSON: {"status": "ok"}'},
             ],
-            model="gpt-4o",
+            model=get_llm_test_model(),
             max_tokens=20,
             response_format={"type": "json_object"},
         )
@@ -94,7 +97,7 @@ class TestPortkeyConnectivity:
         """Verify system prompt is respected."""
         result = ask(
             prompt="What is 2+2?",
-            model="gpt-4o",
+            model=get_llm_test_model(),
             system="You must answer every question with the single word: PINEAPPLE",
             max_tokens=10,
         )

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from io import BytesIO
+
+from app.services.llm import DEFAULT_MODEL, MODEL_MAP
 
 from fastapi import UploadFile
 from starlette.datastructures import Headers
@@ -58,3 +61,19 @@ def make_upload_file(filename: str, content: bytes, content_type: str = "applica
 
 def run_async(coro):
     return asyncio.run(coro)
+
+
+def get_llm_test_model() -> str:
+    """Short model name for tests (e.g. `gpt-4o-mini`).
+
+    Override with env `LLM_TEST_MODEL`. Defaults to `app.services.llm.DEFAULT_MODEL`.
+    If set to a full Portkey id (e.g. ``@org/model``) not in ``MODEL_MAP``, it is used as-is.
+    """
+    raw = (os.environ.get("LLM_TEST_MODEL") or "").strip()
+    return raw or DEFAULT_MODEL
+
+
+def portkey_model_id_for_tests(model: str | None = None) -> str:
+    """Resolve to the string sent in the Portkey `model` field (e.g. ``@gpt-4o-mini/gpt-4o-mini``)."""
+    name = (model or get_llm_test_model()).strip() or DEFAULT_MODEL
+    return MODEL_MAP.get(name, name)

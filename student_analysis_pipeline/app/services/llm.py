@@ -14,8 +14,11 @@ MODEL_MAP = {
     "gpt-4o-mini": "@gpt-4o-mini/gpt-4o-mini",
 }
 
+# Default Portkey model id sent in the API payload (see MODEL_MAP).
+DEFAULT_MODEL = "gpt-4o-mini"
 
-def chat(messages: list, model: str = "gpt-4o", temperature: float = 0.0, max_retries: int = 3, **kwargs) -> str:
+
+def chat(messages: list, model: str = DEFAULT_MODEL, temperature: float = 0.0, max_retries: int = 3, **kwargs) -> str:
     model_id = MODEL_MAP.get(model, model)
 
     headers = {
@@ -55,7 +58,7 @@ def chat(messages: list, model: str = "gpt-4o", temperature: float = 0.0, max_re
     raise Exception(f"LLM call failed after {max_retries} attempts. Last error: {last_error}")
 
 
-def ask(prompt: str, model: str = "gpt-4o", system: str = None, **kwargs) -> str:
+def ask(prompt: str, model: str = DEFAULT_MODEL, system: str = None, **kwargs) -> str:
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -63,7 +66,7 @@ def ask(prompt: str, model: str = "gpt-4o", system: str = None, **kwargs) -> str
     return chat(messages, model=model, **kwargs)
 
 
-def ask_with_images(prompt: str, image_urls: list[dict], model: str = "gpt-4o", system: str = None, **kwargs) -> str:
+def ask_with_images(prompt: str, image_urls: list[dict], model: str = DEFAULT_MODEL, system: str = None, **kwargs) -> str:
     """Send a prompt with inline base64 images to a vision-capable model.
 
     image_urls: list of dicts like {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}

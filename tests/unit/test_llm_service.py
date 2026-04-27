@@ -2,6 +2,7 @@ import pytest
 import requests
 
 from app.services import llm
+from tests.helpers import get_llm_test_model, portkey_model_id_for_tests
 
 
 pytestmark = pytest.mark.unit
@@ -32,10 +33,11 @@ def test_chat_maps_known_model_id_and_returns_text(monkeypatch):
 
     monkeypatch.setattr(llm.requests, "post", fake_post)
 
-    out = llm.chat(messages=[{"role": "user", "content": "hi"}], model="gpt-4o")
+    m = get_llm_test_model()
+    out = llm.chat(messages=[{"role": "user", "content": "hi"}], model=m)
 
     assert out == "hello"
-    assert captured["json"]["model"] == "@gpt-4o/gpt-4o"
+    assert captured["json"]["model"] == portkey_model_id_for_tests(m)
     assert captured["timeout"] == 180
 
 
@@ -97,7 +99,7 @@ def test_chat_rejects_empty_response_content(monkeypatch):
 def test_ask_constructs_messages(monkeypatch):
     captured = {}
 
-    def fake_chat(messages, model="gpt-4o", **kwargs):
+    def fake_chat(messages, model=llm.DEFAULT_MODEL, **kwargs):
         captured["messages"] = messages
         captured["model"] = model
         captured["kwargs"] = kwargs
@@ -105,9 +107,10 @@ def test_ask_constructs_messages(monkeypatch):
 
     monkeypatch.setattr(llm, "chat", fake_chat)
 
-    out = llm.ask(prompt="hello", model="gpt-4o-mini", system="sys", temperature=0.1)
+    m = get_llm_test_model()
+    out = llm.ask(prompt="hello", model=m, system="sys", temperature=0.1)
     assert out == "ok"
-    assert captured["model"] == "gpt-4o-mini"
+    assert captured["model"] == m
     assert captured["messages"] == [
         {"role": "system", "content": "sys"},
         {"role": "user", "content": "hello"},
@@ -159,8 +162,9 @@ def test_chat_forwards_response_format_and_extra_kwargs_to_payload(monkeypatch):
 def test_ask_with_images_constructs_multimodal_message(monkeypatch):
     captured = {}
 
-    def fake_chat(messages, model="gpt-4o", **kwargs):
+    def fake_chat(messages, model=llm.DEFAULT_MODEL, **kwargs):
         captured["messages"] = messages
+        captured["model"] = model
         return "ok"
 
     monkeypatch.setattr(llm, "chat", fake_chat)
@@ -169,6 +173,7 @@ def test_ask_with_images_constructs_multimodal_message(monkeypatch):
     out = llm.ask_with_images(prompt="see image", image_urls=image_urls, system="sys")
 
     assert out == "ok"
+    assert captured["model"] == llm.DEFAULT_MODEL
     assert captured["messages"][0] == {"role": "system", "content": "sys"}
     user_message = captured["messages"][1]
     assert user_message["role"] == "user"

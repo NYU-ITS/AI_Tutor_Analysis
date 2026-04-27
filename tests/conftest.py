@@ -12,6 +12,14 @@ from testcontainers.postgres import PostgresContainer
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = REPO_ROOT / "student_analysis_pipeline"
 
+# Pick up LLM_TEST_MODEL and credentials from pipeline .env when present (does not override existing env).
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(APP_ROOT / ".env", override=False)
+except ImportError:
+    pass
+
 # Ensure `from app...` imports resolve in tests.
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
