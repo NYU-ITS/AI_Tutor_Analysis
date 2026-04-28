@@ -88,8 +88,6 @@ Run:
 
 ```bash
 cd AI_Tutor_Analysis
-source ~/.zshrc
-conda activate oi
 pip install -r student_analysis_pipeline/requirements.txt
 pip install -r tests/requirements-testing.txt
 bash scripts/run_pytest_with_reports.sh
@@ -120,8 +118,6 @@ For a quick demo, this repo now includes a local Prometheus + Grafana stack that
 
 ```bash
 cd AI_Tutor_Analysis
-source ~/.zshrc
-conda activate oi
 bash scripts/run_pytest_with_reports.sh
 ```
 
@@ -137,6 +133,35 @@ That serves:
 
 - `http://127.0.0.1:9109/metrics` – Prometheus metrics
 - `http://127.0.0.1:9109/` – a simple local summary page
+
+### 2b. Run live service and API checks
+
+This runs the live checks for:
+
+- Portkey
+- OpenWebUI database
+- pipeline database
+- deployed tutor dashboard API smoke checks
+
+It automatically:
+
+- finds the primary Postgres pod
+- port-forwards the database locally
+- port-forwards the deployed API locally
+- extracts the real database URIs from OpenShift secrets
+- writes `live-results/results.xml`
+
+```bash
+cd AI_Tutor_Analysis
+bash scripts/run_live_checks_with_reports.sh
+```
+
+To keep these checks running every hour locally:
+
+```bash
+cd AI_Tutor_Analysis
+bash scripts/run_live_checks_hourly.sh 3600
+```
 
 ### 3. Start Prometheus and Grafana
 
@@ -163,6 +188,15 @@ The `AI Tutor Test Observability` dashboard is provisioned automatically and sho
 - total run duration
 - test outcome split
 - suite-level trends for `unit`, `integration`, and `live`
+
+The `AI Tutor Quality Overview` dashboard is also provisioned automatically and combines:
+
+- backend regression status
+- live services and API status
+- Playwright UI journey status
+- backend coverage
+- a compact live-check table
+- a compact Playwright table
 
 ## OpenShift Deployment
 
