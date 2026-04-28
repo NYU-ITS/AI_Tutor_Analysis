@@ -72,7 +72,99 @@ The API is now available at `http://localhost:8000`.
 - Health check: `GET http://localhost:8000/`
 - Interactive docs: `http://localhost:8000/docs` (Swagger UI)
 
-### OpenShift Deployment
+## Test Automation
+
+The repository already separates test types with pytest markers:
+
+- `unit`
+- `integration`
+- `live`
+
+`pytest.ini` defaults to `-m "not live"`, so the regular test workflow and local smoke runs skip live external-service tests automatically.
+
+### Run the non-live suite locally
+
+Run:
+
+```bash
+cd AI_Tutor_Analysis
+source ~/.zshrc
+conda activate oi
+pip install -r student_analysis_pipeline/requirements.txt
+pip install -r tests/requirements-testing.txt
+bash scripts/run_pytest_with_reports.sh
+```
+
+This writes:
+
+- `test-results/results.xml` – JUnit test report
+- `test-results/coverage.xml` – coverage report
+
+### GitHub Actions
+
+The workflow at `.github/workflows/tests.yml` runs on:
+
+- pushes to `feature/test-suite-expansion`
+- pushes to `main`
+- pushes to `auto_pipeline`
+- pull requests targeting `main` or `auto_pipeline`
+- manual `workflow_dispatch`
+
+It uploads the whole `test-results/` directory as an artifact so the team can inspect the XML outputs immediately from the Actions run.
+
+## Local Observability Demo
+
+For a quick demo, this repo now includes a local Prometheus + Grafana stack that reads the latest pytest JUnit and coverage artifacts.
+
+### 1. Generate test results
+
+```bash
+cd AI_Tutor_Analysis
+source ~/.zshrc
+conda activate oi
+bash scripts/run_pytest_with_reports.sh
+```
+
+### 2. Start the local metrics exporter
+
+```bash
+cd AI_Tutor_Analysis
+source ~/.zshrc
+python scripts/serve_test_metrics.py
+```
+
+That serves:
+
+- `http://127.0.0.1:9109/metrics` – Prometheus metrics
+- `http://127.0.0.1:9109/` – a simple local summary page
+
+### 3. Start Prometheus and Grafana
+
+```bash
+cd AI_Tutor_Analysis/observability
+docker compose up -d
+```
+
+Then open:
+
+- Grafana: `http://localhost:3000`
+- Prometheus: `http://localhost:9090`
+
+Grafana credentials for the local demo:
+
+- username: `admin`
+- password: `admin`
+
+The `AI Tutor Test Observability` dashboard is provisioned automatically and shows:
+
+- total tests
+- pass rate
+- coverage percent
+- total run duration
+- test outcome split
+- suite-level trends for `unit`, `integration`, and `live`
+
+## OpenShift Deployment
 
 The backend is deployed in OpenShift at namespace `rit-genai-naga-dev`.
 
