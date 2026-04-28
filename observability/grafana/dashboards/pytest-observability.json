@@ -142,7 +142,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "100 * ai_tutor_pytest_tests_total{status=\"passed\"} / clamp_min(ai_tutor_pytest_tests_total{status=\"total\"}, 1)",
+          "expr": "100 * sum(ai_tutor_pytest_tests_total{status=\"passed\"}) / clamp_min(sum(ai_tutor_pytest_tests_total{status=\"total\"}), 1)",
           "legendFormat": "",
           "range": true,
           "refId": "A"
@@ -498,7 +498,7 @@
         },
         {
           "editorMode": "code",
-          "expr": "100 * ai_tutor_pytest_tests_total{status=\"passed\"} / clamp_min(ai_tutor_pytest_tests_total{status=\"total\"}, 1)",
+          "expr": "100 * sum(ai_tutor_pytest_tests_total{status=\"passed\"}) / clamp_min(sum(ai_tutor_pytest_tests_total{status=\"total\"}), 1)",
           "legendFormat": "pass rate",
           "range": true,
           "refId": "B"
