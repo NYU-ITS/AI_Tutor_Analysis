@@ -2,11 +2,13 @@ name: Tests
 
 on:
   push:
-    branches: [auto_pipeline, main]
+    branches: [auto_pipeline, main, feature/test-suite-expansion]
     paths:
       - "student_analysis_pipeline/**"
       - "tests/**"
       - "pytest.ini"
+      - "scripts/**"
+      - "observability/**"
       - ".github/workflows/tests.yml"
   pull_request:
     branches: [auto_pipeline, main]
@@ -14,6 +16,8 @@ on:
       - "student_analysis_pipeline/**"
       - "tests/**"
       - "pytest.ini"
+      - "scripts/**"
+      - "observability/**"
       - ".github/workflows/tests.yml"
   workflow_dispatch:
 
@@ -30,10 +34,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -42,18 +46,14 @@ jobs:
           pip install -r tests/requirements-testing.txt
 
       - name: Run unit and integration tests
-        run: |
-          python -m pytest \
-            --tb=short \
-            --junitxml=test-results/results.xml \
-            -v
+        run: bash scripts/run_pytest_with_reports.sh
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: test-results/results.xml
+          path: test-results/
 
       - name: Publish test results
         if: always()
