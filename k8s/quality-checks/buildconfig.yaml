@@ -1,0 +1,35 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: ai-tutor-quality-checks
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: ai-tutor-quality-checks
+spec:
+  failedBuildsHistoryLimit: 2
+  successfulBuildsHistoryLimit: 2
+  runPolicy: Serial
+  source:
+    type: Git
+    git:
+      uri: git@github.com:NYU-ITS/AI_Tutor_Analysis.git
+      ref: feature/test-suite-expansion
+    sourceSecret:
+      name: github-rts-open-webui
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: quality_checks/Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: ai-tutor-quality-checks:latest
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

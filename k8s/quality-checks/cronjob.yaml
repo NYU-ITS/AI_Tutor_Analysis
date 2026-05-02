@@ -1,0 +1,87 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ai-tutor-live-quality-checks
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: quality-checks
+              image: image-registry.openshift-image-registry.svc:5000/rit-genai-naga-dev/ai-tutor-quality-checks:latest
+              imagePullPolicy: Always
+              env:
+                - name: LIVE_API_BASE_URL
+                  value: http://open-webui-mastering-homework.rit-genai-naga-dev.svc:8000
+                - name: PORTKEY_BASE_URL
+                  value: https://ai-gateway.apps.cloud.rt.nyu.edu/v1
+                - name: QUALITY_ENVIRONMENT
+                  value: openshift-dev
+                - name: QUALITY_REPOSITORY
+                  value: AI_Tutor_Analysis
+                - name: QUALITY_BRANCH
+                  value: feature/test-suite-expansion
+                - name: QUALITY_SOURCE
+                  value: openshift-live-checks-hourly
+                - name: QUALITY_RUN_ID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: QUALITY_COMMIT_SHA
+                  value: openshift-build
+                - name: QUALITY_FORWARD_SECONDS
+                  value: "75"
+                - name: GRAFANA_CLOUD_PROMETHEUS_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: ai-tutor-grafana-cloud-secret
+                      key: GRAFANA_CLOUD_PROMETHEUS_URL
+                - name: GRAFANA_CLOUD_PROMETHEUS_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ai-tutor-grafana-cloud-secret
+                      key: GRAFANA_CLOUD_PROMETHEUS_USER
+                - name: GRAFANA_CLOUD_PROMETHEUS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ai-tutor-grafana-cloud-secret
+                      key: GRAFANA_CLOUD_PROMETHEUS_PASSWORD
+                - name: PORTKEY_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: open-webui-mastering-homework-secret
+                      key: portkey-api-key
+                - name: PIPELINE_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: open-webui-mastering-homework-secret
+                      key: pipeline-database-url
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: open-webui-mastering-homework-secret
+                      key: database-url
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
