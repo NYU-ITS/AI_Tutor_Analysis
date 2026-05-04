@@ -19,12 +19,14 @@ from xml.etree import ElementTree as ET
 
 LIVE_GROUP_LABELS = {
     "api_smoke": "Deployed backend",
+    "frontend_smoke": "Deployed frontend",
     "external_service": "Connected services",
 }
 
 LIVE_SERVICE_LABELS = {
     "backend_app": "Analytics backend",
     "backend_api": "Tutor dashboard backend",
+    "openwebui_frontend": "Open WebUI frontend",
     "openwebui_db": "OpenWebUI database",
     "pipeline_db": "Pipeline database",
     "portkey": "Portkey AI gateway",
@@ -42,6 +44,10 @@ LIVE_CHECK_LABELS = {
     "test_analysis_endpoint_responds": "Analysis list responds",
     "test_practice_endpoint_responds": "Practice list responds",
     "test_assignment_endpoint_responds": "Assignment list responds",
+    "test_frontend_home_page_serves_application": "Frontend app loads",
+    "test_frontend_health_endpoint_responds": "Frontend health route responds",
+    "test_ai_tutor_dashboard_route_is_served": "Tutor dashboard route responds",
+    "test_frontend_config_endpoint_responds": "Frontend config route responds",
     "test_db_connection_works": "Database connection works",
     "test_user_table_has_rows": "User records exist",
     "test_group_table_has_rows": "Group records exist",
@@ -94,6 +100,8 @@ def _live_service_for_testcase(testcase: ET.Element) -> tuple[str, str]:
     hint = f'{testcase.get("classname", "")} {testcase.get("name", "")}'.lower()
     if "api_smoke" in hint:
         return "api_smoke", "backend_api"
+    if "frontend_smoke" in hint:
+        return "frontend_smoke", "openwebui_frontend"
     if "openwebui_db" in hint:
         return "external_service", "openwebui_db"
     if "pipeline_db" in hint:
@@ -199,7 +207,7 @@ def _emit_source_metrics(lines: list[str], summary: dict[str, object]) -> None:
         lines.append(
             _metric_line(
                 "ai_tutor_quality_service_ok",
-                1 if counts.get("failed", 0) == 0 and counts.get("error", 0) == 0 and sum(counts.values()) > 0 else 0,
+                1 if counts.get("passed", 0) > 0 and counts.get("failed", 0) == 0 and counts.get("error", 0) == 0 else 0,
                 {"source": source, "service": service},
             )
         )
@@ -282,7 +290,7 @@ def _parse_junit_report(
     summary.update(
         {
             "available": True,
-            "ok": failed == 0 and errors == 0 and tests > 0,
+            "ok": passed > 0 and failed == 0 and errors == 0,
             "tests": tests,
             "passed": passed,
             "failed": failed,

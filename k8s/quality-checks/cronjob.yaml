@@ -1,9 +1,10 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: ai-tutor-live-quality-checks
+  name: ai-tutor-backend-scheduled-quality-checks
 spec:
-  schedule: "0 * * * *"
+  schedule: "0 1 * * *"
+  timeZone: "America/New_York"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 2
@@ -16,12 +17,14 @@ spec:
           automountServiceAccountToken: false
           restartPolicy: Never
           containers:
-            - name: quality-checks
+            - name: backend-scheduled-quality-checks
               image: image-registry.openshift-image-registry.svc:5000/rit-genai-naga-dev/ai-tutor-quality-checks:latest
               imagePullPolicy: Always
               env:
                 - name: LIVE_API_BASE_URL
                   value: http://open-webui-mastering-homework.rit-genai-naga-dev.svc:8000
+                - name: LIVE_FRONTEND_BASE_URL
+                  value: http://open-webui.rit-genai-naga-dev.svc:80
                 - name: PORTKEY_BASE_URL
                   value: https://ai-gateway.apps.cloud.rt.nyu.edu/v1
                 - name: QUALITY_ENVIRONMENT
@@ -31,7 +34,7 @@ spec:
                 - name: QUALITY_BRANCH
                   value: feature/test-suite-expansion
                 - name: QUALITY_SOURCE
-                  value: openshift-live-checks-hourly
+                  value: openshift-backend-scheduled-checks
                 - name: QUALITY_RUN_ID
                   valueFrom:
                     fieldRef:

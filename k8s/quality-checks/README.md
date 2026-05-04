@@ -1,14 +1,16 @@
-# AI Tutor OpenShift Quality Checks
+# AI Tutor Backend Scheduled Quality Checks on OpenShift
 
-This runs live AI Tutor checks from inside the OpenShift dev namespace and sends the result metrics to Grafana Cloud.
+This runs scheduled AI Tutor backend checks from inside the OpenShift dev namespace and sends the result metrics to Grafana Cloud.
+
+These checks touch the dev deployment and external backend dependencies, so the name uses `scheduled` instead of `live`. That avoids confusing scheduled dev checks with real production/live user traffic.
 
 It does not deploy Grafana or Prometheus as long-running services.
 
 ## What It Creates
 
-- `ai-tutor-quality-checks` image build
-- one manual `Job`
-- one hourly `CronJob`
+- `ai-tutor-quality-checks` backend test image build
+- one manual backend `Job`: `ai-tutor-backend-scheduled-quality-check`
+- one daily backend `CronJob`: `ai-tutor-backend-scheduled-quality-checks`
 - one Grafana Cloud secret
 
 The Job/CronJob pods are short-lived. They run checks, send metrics, and exit.
@@ -51,8 +53,8 @@ bash scripts/create_openshift_grafana_cloud_secret.sh
 ## Manual Test Run
 
 ```bash
-oc create job ai-tutor-live-quality-check-$(date +%s) \
-  --from=job/ai-tutor-live-quality-check \
+oc create job ai-tutor-backend-scheduled-quality-check-$(date +%s) \
+  --from=job/ai-tutor-backend-scheduled-quality-check \
   -n rit-genai-naga-dev
 ```
 
@@ -65,17 +67,17 @@ oc apply -f k8s/quality-checks/job.yaml -n rit-genai-naga-dev
 Watch it:
 
 ```bash
-oc get pods -n rit-genai-naga-dev | grep ai-tutor-live-quality
+oc get pods -n rit-genai-naga-dev | grep ai-tutor-backend-scheduled-quality
 oc logs job/<job-name> -n rit-genai-naga-dev
 ```
 
-## Hourly Schedule
+## Daily Schedule
 
 ```bash
 oc apply -f k8s/quality-checks/cronjob.yaml -n rit-genai-naga-dev
 ```
 
-This runs every hour.
+This runs daily at 1:00 AM New York time.
 
 ## Grafana
 
@@ -88,7 +90,6 @@ ai_tutor_quality_checks_total{environment="openshift-dev"}
 Useful filters:
 
 ```promql
-ai_tutor_quality_checks_total{source="openshift-live-checks"}
-ai_tutor_quality_checks_total{source="openshift-live-checks-hourly"}
+ai_tutor_quality_checks_total{source="openshift-backend-scheduled-checks"}
 ai_tutor_quality_service_ok{environment="openshift-dev"}
 ```
