@@ -639,7 +639,7 @@ def _directory_listing(title: str, base_url: str, files: list[Path], root_dir: P
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Serve pytest, live-check, and Playwright metrics for Prometheus/Grafana.")
+    parser = argparse.ArgumentParser(description="Serve pytest, deployed-environment, and Playwright metrics for Prometheus/Grafana.")
     parser.add_argument("--results", default="test-results/results.xml", help="Path to non-live pytest JUnit XML results.")
     parser.add_argument("--coverage", default="test-results/coverage.xml", help="Path to non-live pytest coverage XML report.")
     parser.add_argument("--live-results", default="live-results/results.xml", help="Path to live pytest JUnit XML results.")

@@ -6,6 +6,10 @@ These checks touch the dev deployment and external backend dependencies, so the 
 
 It does not deploy Grafana or Prometheus as long-running services.
 
+For the full local, GitHub Actions, Grafana Cloud, and OpenShift testing picture, see:
+
+- `../../AI_TUTOR_TESTING_OBSERVABILITY.md`
+
 ## What It Creates
 
 - `ai-tutor-quality-checks` backend test image build
@@ -14,6 +18,15 @@ It does not deploy Grafana or Prometheus as long-running services.
 - one Grafana Cloud secret
 
 The Job/CronJob pods are short-lived. They run checks, send metrics, and exit.
+
+## What It Checks
+
+- deployed backend service reachability
+- tutor dashboard backend API smoke checks
+- Portkey AI gateway reachability
+- OpenWebUI database connection
+- pipeline database connection
+- lightweight OpenWebUI frontend route reachability
 
 ## Before Applying
 
@@ -78,6 +91,16 @@ oc apply -f k8s/quality-checks/cronjob.yaml -n rit-genai-naga-dev
 ```
 
 This runs daily at 1:00 AM New York time.
+
+## Post-Deploy Run
+
+To run the same checks immediately after a dev rollout:
+
+```bash
+oc create job ai-tutor-backend-post-deploy-check-$(date +%s) \
+  --from=cronjob/ai-tutor-backend-scheduled-quality-checks \
+  -n rit-genai-naga-dev
+```
 
 ## Grafana
 

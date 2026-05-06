@@ -74,13 +74,18 @@ The API is now available at `http://localhost:8000`.
 
 ## Test Automation
 
+For the current full local, GitHub Actions, Grafana Cloud, and OpenShift dev setup, see:
+
+- [AI_TUTOR_TESTING_OBSERVABILITY.md](AI_TUTOR_TESTING_OBSERVABILITY.md)
+- [k8s/quality-checks/README.md](k8s/quality-checks/README.md)
+
 The repository already separates test types with pytest markers:
 
 - `unit`
 - `integration`
 - `live`
 
-`pytest.ini` defaults to `-m "not live"`, so the regular test workflow and local smoke runs skip live external-service tests automatically.
+`pytest.ini` defaults to `-m "not live"`, so the regular local and GitHub runs skip external-service checks automatically.
 
 ### Run the non-live suite locally
 
@@ -110,9 +115,11 @@ The workflow at `.github/workflows/tests.yml` runs on:
 
 It uploads the whole `test-results/` directory as an artifact so the team can inspect the XML outputs immediately from the Actions run.
 
+When Grafana Cloud secrets are configured, the workflow also forwards test metrics to Grafana Cloud. GitHub Actions does not log into OpenShift and does not use personal `oc login` tokens.
+
 ## Local Observability Demo
 
-For a quick demo, this repo now includes a local Prometheus + Grafana stack that reads the latest pytest JUnit and coverage artifacts.
+For a quick demo, this repo includes a local Prometheus + Grafana stack that reads the latest pytest JUnit and coverage artifacts.
 
 ### 1. Generate test results
 
@@ -134,14 +141,15 @@ That serves:
 - `http://127.0.0.1:9109/metrics` – Prometheus metrics
 - `http://127.0.0.1:9109/` – a simple local summary page
 
-### 2b. Run live service and API checks
+### 2b. Run deployed-environment checks locally through port-forwarding
 
-This runs the live checks for:
+This runs read-only checks against the deployed dev environment through local port-forwarding.
 
 - Portkey
 - OpenWebUI database
 - pipeline database
 - deployed tutor dashboard API smoke checks
+- OpenWebUI frontend route smoke checks
 
 It automatically:
 
@@ -154,13 +162,6 @@ It automatically:
 ```bash
 cd AI_Tutor_Analysis
 bash scripts/run_live_checks_with_reports.sh
-```
-
-To keep these checks running every hour locally:
-
-```bash
-cd AI_Tutor_Analysis
-bash scripts/run_live_checks_hourly.sh 3600
 ```
 
 ### 3. Start Prometheus and Grafana
@@ -192,11 +193,39 @@ The `AI Tutor Test Observability` dashboard is provisioned automatically and sho
 The `AI Tutor Quality Overview` dashboard is also provisioned automatically and combines:
 
 - backend regression status
-- live services and API status
+- deployed dev service and API status
 - Playwright UI journey status
 - backend coverage
-- a compact live-check table
+- a compact deployed-service check table
 - a compact Playwright table
+
+For Grafana Cloud, import:
+
+- `observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
+
+That dashboard separates GitHub checks from OpenShift scheduled checks and uses latest-run counts instead of accumulating repeated runs.
+
+## OpenShift Scheduled Quality Checks
+
+OpenShift dev scheduled checks are short-lived Jobs, not long-running pods.
+
+Namespace:
+
+- `rit-genai-naga-dev`
+
+Backend scheduled CronJob:
+
+- `ai-tutor-backend-scheduled-quality-checks`
+- runs daily at `1:00 AM America/New_York`
+- forwards metrics to Grafana Cloud
+- uses files under `k8s/quality-checks/`
+
+Frontend scheduled CronJob lives in `NAGA-open-webui`:
+
+- `ai-tutor-frontend-scheduled-quality-checks`
+- runs daily at `1:00 AM America/New_York`
+- currently runs frontend Vitest checks only
+- Playwright remains in GitHub Actions unless a larger OpenShift browser-test budget is approved
 
 ## OpenShift Deployment
 

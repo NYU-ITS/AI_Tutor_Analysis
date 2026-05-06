@@ -95,7 +95,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "How many read-only live checks passed against the deployed backend and external dependencies in the latest run.",
+      "description": "How many read-only deployed-environment checks passed against the deployed backend and external dependencies in the latest run.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -155,7 +155,7 @@
           "refId": "A"
         }
       ],
-      "title": "Live Checks Passed",
+      "title": "Deployed Checks Passed",
       "type": "stat"
     },
     {
@@ -235,7 +235,7 @@
           "refId": "A"
         }
       ],
-      "title": "Live Checks Failing",
+      "title": "Deployed Checks Failing",
       "type": "stat"
     },
     {
@@ -449,7 +449,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Each line shows whether a production-relevant dependency was healthy in the latest hourly live check. A drop to 0 marks a failure at that point in time.",
+      "description": "Each line shows whether a production-relevant dependency was healthy in the latest scheduled deployed-environment check. A drop to 0 marks a failure at that point in time.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -925,7 +925,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "AI Tutor Quality Overview",
+  "title": "AI Tutor Local Quality Overview",
   "uid": "ai-tutor-quality-overview",
   "version": 2,
   "weekStart": ""
