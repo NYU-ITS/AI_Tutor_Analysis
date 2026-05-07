@@ -15,6 +15,7 @@ The goal is to move away from Grafana Cloud and keep test observability inside `
   - `AI Tutor Quality - OpenShift` for scheduled checks running inside OpenShift.
   - `AI Tutor Quality - GitHub` for GitHub Actions results once GitHub metrics are routed into the OpenShift metrics store.
   - `AI Tutor Quality - Local` for local demo/test runs pushed into the same store.
+- `ai-tutor-quality-grafana-provisioner` Job to create/update the Grafana datasource and dashboards through the Grafana API.
 
 ## Why Pushgateway Exists
 
@@ -55,6 +56,16 @@ oc apply -f k8s/observability/40-grafana-datasource.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/50-grafana-dashboard.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/51-github-dashboard.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/52-local-dashboard.yaml -n rit-genai-naga-dev
+oc apply -f k8s/observability/60-grafana-provisioner-job.yaml -n rit-genai-naga-dev
+```
+
+The Grafana Operator dashboard/datasource custom resources are kept in place, but dev showed that they can report success while Grafana itself still has no datasource. The provisioner Job is the reliable path for now: it uses the Grafana admin secret, creates the Prometheus datasource, imports the OpenShift/GitHub/Local dashboards, then exits.
+
+If the provisioner Job already exists from an earlier manual run, delete only that completed Job and apply it again:
+
+```bash
+oc delete job ai-tutor-quality-grafana-provisioner -n rit-genai-naga-dev
+oc apply -f k8s/observability/60-grafana-provisioner-job.yaml -n rit-genai-naga-dev
 ```
 
 Then point the backend and frontend quality Jobs at Pushgateway:

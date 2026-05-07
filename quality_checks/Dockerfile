@@ -19,9 +19,10 @@ RUN pip install --no-cache-dir -r /tmp/app-requirements.txt -r /tmp/test-require
 COPY student_analysis_pipeline ./student_analysis_pipeline
 COPY tests ./tests
 COPY pytest.ini ./pytest.ini
-COPY scripts/serve_test_metrics.py scripts/write_grafana_cloud_prometheus_config.py scripts/run_openshift_quality_checks.sh ./scripts/
+COPY scripts/serve_test_metrics.py scripts/write_grafana_cloud_prometheus_config.py scripts/run_openshift_quality_checks.sh scripts/provision_grafana_quality_assets.py ./scripts/
+COPY k8s/observability/50-grafana-dashboard.yaml k8s/observability/51-github-dashboard.yaml k8s/observability/52-local-dashboard.yaml ./k8s/observability/
 
-RUN chmod +x ./scripts/run_openshift_quality_checks.sh ./scripts/write_grafana_cloud_prometheus_config.py \
+RUN chmod +x ./scripts/run_openshift_quality_checks.sh ./scripts/write_grafana_cloud_prometheus_config.py ./scripts/provision_grafana_quality_assets.py \
     && chgrp -R 0 /workspace \
     && chmod -R g=u /workspace
 
