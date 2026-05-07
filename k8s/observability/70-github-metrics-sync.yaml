@@ -1,5 +1,5 @@
 apiVersion: batch/v1
-kind: CronJob
+kind: Job
 metadata:
   name: ai-tutor-github-quality-metrics-sync
   labels:
@@ -7,54 +7,46 @@ metadata:
     app.kubernetes.io/component: github-metrics-sync
     app.kubernetes.io/part-of: ai-tutor-observability
 spec:
-  schedule: "*/15 * * * *"
-  timeZone: America/New_York
-  suspend: true
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 1
-  failedJobsHistoryLimit: 2
-  jobTemplate:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-tutor-github-quality-metrics-sync
+        app.kubernetes.io/component: github-metrics-sync
+        app.kubernetes.io/part-of: ai-tutor-observability
     spec:
-      backoffLimit: 1
-      ttlSecondsAfterFinished: 600
-      template:
-        metadata:
-          labels:
-            app.kubernetes.io/name: ai-tutor-github-quality-metrics-sync
-            app.kubernetes.io/component: github-metrics-sync
-            app.kubernetes.io/part-of: ai-tutor-observability
-        spec:
-          restartPolicy: Never
-          nodeSelector:
-            topology.kubernetes.io/region: rcdc
-          containers:
-            - name: github-metrics-sync
-              image: image-registry.openshift-image-registry.svc:5000/rit-genai-naga-dev/ai-tutor-quality-checks:latest
-              imagePullPolicy: Always
-              command:
-                - python
-                - scripts/sync_github_quality_metrics.py
-              env:
-                - name: GITHUB_OWNER
-                  value: NYU-ITS
-                - name: GITHUB_QUALITY_ARTIFACTS
-                  value: AI_Tutor_Analysis:ai-tutor-backend-quality-metrics,NAGA-open-webui:ai-tutor-frontend-quality-metrics
-                - name: GITHUB_BRANCH_FILTER
-                  value: ""
-                - name: QUALITY_ENVIRONMENT
-                  value: github-actions
-                - name: QUALITY_PUSHGATEWAY_URL
-                  value: http://ai-tutor-quality-pushgateway:9091
-                - name: GITHUB_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: ai-tutor-github-metrics-sync-secret
-                      key: GITHUB_TOKEN
-                      optional: false
-              resources:
-                requests:
-                  cpu: 50m
-                  memory: 128Mi
-                limits:
-                  cpu: 250m
-                  memory: 256Mi
+      restartPolicy: Never
+      nodeSelector:
+        topology.kubernetes.io/region: rcdc
+      containers:
+        - name: github-metrics-sync
+          image: image-registry.openshift-image-registry.svc:5000/rit-genai-naga-dev/ai-tutor-quality-checks:latest
+          imagePullPolicy: Always
+          command:
+            - python
+            - scripts/sync_github_quality_metrics.py
+          env:
+            - name: GITHUB_OWNER
+              value: NYU-ITS
+            - name: GITHUB_QUALITY_ARTIFACTS
+              value: AI_Tutor_Analysis:ai-tutor-backend-quality-metrics,NAGA-open-webui:ai-tutor-frontend-quality-metrics
+            - name: GITHUB_BRANCH_FILTER
+              value: ""
+            - name: QUALITY_ENVIRONMENT
+              value: github-actions
+            - name: QUALITY_PUSHGATEWAY_URL
+              value: http://ai-tutor-quality-pushgateway:9091
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai-tutor-github-metrics-sync-secret
+                  key: GITHUB_TOKEN
+                  optional: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

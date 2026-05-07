@@ -84,7 +84,7 @@
       },
       "id": 1,
       "options": {
-        "content": "## AI Tutor Quality Overview\nThis dashboard separates two views: GitHub CI checks and OpenShift dev scheduled checks. GitHub checks prove code changes are tested before deploy. OpenShift scheduled checks prove the deployed dev system can respond from inside the cluster.\n\nThe top numbers show the latest values found inside the selected time range. If a panel shows no data, widen the time range or run the related check again.",
+        "content": "## AI Tutor Quality Overview\nThis dashboard separates two views: GitHub CI checks and OpenShift dev post-deployment checks. GitHub checks prove code changes are tested before deploy. OpenShift post-deployment checks prove the deployed dev system can respond from inside the cluster.\n\nThe top numbers show the latest values found inside the selected time range. If a panel shows no data, widen the time range or run the related check again.",
         "mode": "markdown"
       },
       "pluginVersion": "11.2.0",
@@ -380,7 +380,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "How long it has been since OpenShift dev last sent scheduled quality-check results. If no CronJob is active, this reflects only the last manual run.",
+      "description": "How long it has been since OpenShift dev last sent post-deployment quality-check results.",
       "fieldConfig": {
         "defaults": {
           "color": {

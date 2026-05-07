@@ -10,11 +10,8 @@ Requires: DATABASE_URL set in .env or environment, and the DB must be reachable
           (on server: direct access; locally: port-forward must be active).
 """
 
-import os
-
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
 
 from app.services.openwebui_db import (
     OwuiChat,
@@ -23,22 +20,19 @@ from app.services.openwebui_db import (
     OwuiUser,
     owui_engine,
 )
+from tests.live._runtime import skip_or_fail
 
 
-pytestmark = pytest.mark.live
+pytestmark = [pytest.mark.live, pytest.mark.external_service, pytest.mark.health]
 
 
-# Skip all tests if DB is unreachable at import time
-_skip_reason = None
-try:
-    _test_conn = owui_engine.connect()
-    _test_conn.execute(text("SELECT 1"))
-    _test_conn.close()
-except Exception as exc:
-    _skip_reason = f"OpenWebUI DB not reachable: {exc}"
-
-if _skip_reason:
-    pytestmark = [pytest.mark.live, pytest.mark.skip(reason=_skip_reason)]
+@pytest.fixture(autouse=True)
+def require_openwebui_db_available():
+    try:
+        with owui_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        skip_or_fail(f"OpenWebUI DB not reachable: {exc}")
 
 
 class TestOpenWebUIDBConnectivity:

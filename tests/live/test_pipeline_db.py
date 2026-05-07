@@ -11,26 +11,22 @@ Requires: PIPELINE_DATABASE_URL set in .env or environment, and the DB must be r
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
 
 from app.database import SessionLocal, engine
 from app.models import GeneralPrompt
+from tests.live._runtime import skip_or_fail
 
 
-pytestmark = pytest.mark.live
+pytestmark = [pytest.mark.live, pytest.mark.external_service, pytest.mark.health]
 
 
-# Skip if Pipeline DB is unreachable
-_skip_reason = None
-try:
-    _test_conn = engine.connect()
-    _test_conn.execute(text("SELECT 1"))
-    _test_conn.close()
-except Exception as exc:
-    _skip_reason = f"Pipeline DB not reachable: {exc}"
-
-if _skip_reason:
-    pytestmark = [pytest.mark.live, pytest.mark.skip(reason=_skip_reason)]
+@pytest.fixture(autouse=True)
+def require_pipeline_db_available():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        skip_or_fail(f"Pipeline DB not reachable: {exc}")
 
 
 class TestPipelineDBConnectivity:

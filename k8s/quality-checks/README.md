@@ -1,118 +1,67 @@
-# AI Tutor Backend Scheduled Quality Checks on OpenShift
+# AI Tutor Backend Post-Deployment Quality Checks on OpenShift
 
-This runs scheduled AI Tutor backend checks from inside the OpenShift dev namespace and sends the result metrics to Grafana Cloud.
+This runs AI Tutor backend checks after the OpenShift dev backend deployment is rebuilt and rolled out.
 
-These checks touch the dev deployment and external backend dependencies, so the name uses `scheduled` instead of `live`. That avoids confusing scheduled dev checks with real production/live user traffic.
+It is intentionally not scheduled. The point is to answer: "Did this newly deployed backend work from inside OpenShift dev?"
 
-It does not deploy Grafana or Prometheus as long-running services.
-
-For the full local, GitHub Actions, Grafana Cloud, and OpenShift testing picture, see:
+For the full local, GitHub Actions, and OpenShift testing picture, see:
 
 - `../../AI_TUTOR_TESTING_OBSERVABILITY.md`
+- `../observability/README.md`
 
 ## What It Creates
 
 - `ai-tutor-quality-checks` backend test image build
-- one manual backend `Job`: `ai-tutor-backend-scheduled-quality-check`
-- one daily backend `CronJob`: `ai-tutor-backend-scheduled-quality-checks`
-- one Grafana Cloud secret
+- one short-lived backend `Job`: `ai-tutor-backend-post-deploy-quality-check`
 
-The Job/CronJob pods are short-lived. They run checks, send metrics, and exit.
+The Job uses resources only while it runs, sends metrics to the OpenShift Pushgateway, then exits.
 
 ## What It Checks
 
-- deployed backend service reachability
-- tutor dashboard backend API smoke checks
-- Portkey AI gateway reachability
-- OpenWebUI database connection
-- pipeline database connection
-- lightweight OpenWebUI frontend route reachability
+- `smoke`: deployed backend and frontend routes respond without server errors
+- `integration`: deployed backend API contract checks through read-only endpoints
+- `health`: backend health endpoint, frontend health route, database connectivity, Portkey credential/gateway check
+- `external_service`: Portkey AI gateway, OpenWebUI database, and pipeline database checks
 
-## Before Applying
-
-Do not put real Grafana Cloud tokens in git.
-
-Create or update the OpenShift Secret from environment variables:
+The OpenShift runner uses:
 
 ```bash
-export GRAFANA_CLOUD_PROMETHEUS_URL="https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push"
-export GRAFANA_CLOUD_PROMETHEUS_USER="<grafana-cloud-prometheus-user>"
-export GRAFANA_CLOUD_PROMETHEUS_PASSWORD="<grafana-cloud-prometheus-token>"
-
-bash scripts/create_openshift_grafana_cloud_secret.sh
+pytest --noconftest tests/live -m "live and (smoke or integration or health or external_service)"
 ```
 
-This creates/updates:
+`QUALITY_STRICT_LIVE_CHECKS=1` is enabled in OpenShift so missing required configuration, such as a Portkey key or database URL, is reported as a failed quality signal instead of being silently skipped.
 
-```text
-ai-tutor-grafana-cloud-secret
-```
-
-The checked-in `secret.example.yaml` is only a reference template.
-
-## One-Time Setup
+## One-Time Build Setup
 
 ```bash
 oc apply -f k8s/quality-checks/buildconfig.yaml -n rit-genai-naga-dev
 oc start-build ai-tutor-quality-checks --follow -n rit-genai-naga-dev
 ```
 
-Create the Grafana Cloud secret:
+## Build, Deploy, and Test
+
+This uses the current user's OpenShift permissions. It starts the backend quality image build, starts the backend app build, waits for rollout, runs the quality Job, sends metrics, and exits.
 
 ```bash
-bash scripts/create_openshift_grafana_cloud_secret.sh
+bash scripts/run_backend_build_deploy_quality_check.sh
 ```
 
-## Manual Test Run
+If the backend was already rebuilt and you only want to run the post-deployment check:
 
 ```bash
-oc create job ai-tutor-backend-scheduled-quality-check-$(date +%s) \
-  --from=job/ai-tutor-backend-scheduled-quality-check \
-  -n rit-genai-naga-dev
+bash scripts/run_post_deploy_quality_check.sh
 ```
 
-If the base Job has not been applied yet:
-
-```bash
-oc apply -f k8s/quality-checks/job.yaml -n rit-genai-naga-dev
-```
-
-Watch it:
-
-```bash
-oc get pods -n rit-genai-naga-dev | grep ai-tutor-backend-scheduled-quality
-oc logs job/<job-name> -n rit-genai-naga-dev
-```
-
-## Daily Schedule
-
-```bash
-oc apply -f k8s/quality-checks/cronjob.yaml -n rit-genai-naga-dev
-```
-
-This runs daily at 1:00 AM New York time.
-
-## Post-Deploy Run
-
-To run the same checks immediately after a dev rollout:
-
-```bash
-oc create job ai-tutor-backend-post-deploy-check-$(date +%s) \
-  --from=cronjob/ai-tutor-backend-scheduled-quality-checks \
-  -n rit-genai-naga-dev
-```
+The script runs these steps: wait for rollout, delete the previous completed Job, apply the Job manifest, wait for completion, and print logs.
 
 ## Grafana
 
-After a job finishes, check Grafana Cloud with:
+After the Job finishes, the OpenShift Grafana dashboard reads the latest pushed metrics from the namespace Prometheus.
+
+Useful PromQL checks:
 
 ```promql
-ai_tutor_quality_checks_total{environment="openshift-dev"}
-```
-
-Useful filters:
-
-```promql
-ai_tutor_quality_checks_total{source="openshift-backend-scheduled-checks"}
-ai_tutor_quality_service_ok{environment="openshift-dev"}
+ai_tutor_quality_checks_total{environment="openshift-dev",repository="AI_Tutor_Analysis"}
+ai_tutor_quality_service_ok{environment="openshift-dev",repository="AI_Tutor_Analysis"}
+ai_tutor_quality_group_checks_total{environment="openshift-dev",repository="AI_Tutor_Analysis"}
 ```

@@ -1,6 +1,6 @@
 # AI Tutor Testing and Observability
 
-Last updated: 2026-05-05
+Last updated: 2026-05-07
 
 This document describes the current AI Tutor testing and observability setup across local development, GitHub Actions, Grafana Cloud, and OpenShift dev.
 
@@ -17,8 +17,8 @@ The frontend calls the backend analytics service, but the repositories are built
 
 - `backend` means checks for `AI_Tutor_Analysis`.
 - `frontend` means checks for `NAGA-open-webui`.
-- `scheduled` means OpenShift runs the check automatically on a timer.
-- We avoid using `live` in Job/CronJob names because it can be confused with production traffic. When a check touches the deployed dev environment, the docs call that a deployed-environment check.
+- OpenShift checks are post-deployment checks. They are intentionally not scheduled because GitHub Actions already runs the code-level test suites.
+- We avoid using `live` in Job names where it can be confused with production traffic. When a check touches the deployed dev environment, the docs call that a deployed-environment check.
 
 ## Local Backend Checks
 
@@ -113,12 +113,12 @@ Live Playwright checks are environment-gated. They run only when explicitly enab
 
 ## Grafana Cloud
 
-Grafana Cloud currently receives test metrics from:
+Grafana receives test metrics from:
 
 - GitHub backend workflow
 - GitHub frontend workflow
-- OpenShift backend scheduled quality checks
-- OpenShift frontend scheduled quality checks
+- OpenShift backend post-deployment quality checks
+- OpenShift frontend live Playwright post-deployment quality checks
 
 Required GitHub repository secrets:
 
@@ -154,7 +154,7 @@ Important dashboard behavior:
 
 - stat panels show the latest reported run per source
 - pass counts do not stack across repeated runs in the selected time window
-- failure panels separate GitHub checks from OpenShift scheduled checks
+- failure panels separate GitHub checks from OpenShift post-deployment checks
 
 ## Local Grafana Demo
 
@@ -165,7 +165,7 @@ cd AI_Tutor_Analysis/observability
 docker compose up -d
 ```
 
-Use this for local demos only. The OpenShift dev setup currently sends metrics to Grafana Cloud instead of running a long-lived Grafana/Prometheus stack inside the namespace.
+Use this for local demos only. The OpenShift dev setup uses the namespace Pushgateway, Prometheus, and Grafana manifests in `k8s/observability`.
 
 ## OpenShift Dev Setup
 
@@ -173,111 +173,91 @@ Namespace:
 
 - `rit-genai-naga-dev`
 
-### Backend Scheduled Checks
+### Backend Post-Deployment Checks
 
 Files:
 
 - `k8s/quality-checks/buildconfig.yaml`
 - `k8s/quality-checks/job.yaml`
-- `k8s/quality-checks/cronjob.yaml`
 - `k8s/quality-checks/README.md`
 
 OpenShift objects:
 
 - BuildConfig/ImageStream image: `ai-tutor-quality-checks`
-- manual Job: `ai-tutor-backend-scheduled-quality-check`
-- scheduled CronJob: `ai-tutor-backend-scheduled-quality-checks`
-
-Schedule:
-
-- daily at `1:00 AM America/New_York`
+- post-deployment Job: `ai-tutor-backend-post-deploy-quality-check`
 
 What it checks:
 
-- deployed backend service reachability
-- tutor dashboard backend API smoke checks
-- Portkey AI gateway reachability
-- OpenWebUI database connection
-- pipeline database connection
-- lightweight OpenWebUI frontend route reachability
+- `smoke`: deployed backend/frontend routes respond
+- `integration`: deployed backend API contract checks through read-only endpoints
+- `health`: backend health, frontend health route, database connectivity, and Portkey credential/gateway checks
+- `external_service`: Portkey AI gateway, OpenWebUI database, and pipeline database checks
+
+The OpenShift backend quality runner is strict. Missing required deployed-environment config fails the quality signal instead of being treated as an acceptable skip.
 
 The Job is short-lived. It runs checks, forwards metrics, then exits.
 
-### Frontend Scheduled Checks
+### Frontend Post-Deployment Checks
 
 Files in `NAGA-open-webui`:
 
 - `k8s/quality-checks/buildconfig.yaml`
 - `k8s/quality-checks/job.yaml`
-- `k8s/quality-checks/cronjob.yaml`
 - `k8s/quality-checks/README.md`
 
 OpenShift objects:
 
 - BuildConfig/ImageStream image: `ai-tutor-frontend-quality-checks`
-- manual Job: `ai-tutor-frontend-scheduled-quality-check`
-- scheduled CronJob: `ai-tutor-frontend-scheduled-quality-checks`
-
-Schedule:
-
-- daily at `1:00 AM America/New_York`
+- post-deployment Job: `ai-tutor-frontend-post-deploy-quality-check`
 
 What it checks today:
 
-- AI Tutor frontend Vitest unit/component checks
+- live Playwright AI Tutor workflows against the deployed OpenShift frontend
 
-What is intentionally disabled in OpenShift today:
+What it does not run:
 
-- Playwright browser checks
+- Vitest unit/component checks
+- mocked Playwright checks
 
 Reason:
 
-- Chromium + Vite exceeded the small dev memory budget during testing. GitHub Actions remains the current place for mocked Playwright checks until a larger OpenShift runner/pod budget is approved.
+- those tests already run in GitHub Actions and should not be repeated in OpenShift
 
 ## Post-Deploy Testing Direction
 
-The current OpenShift scheduled checks run nightly.
-
-To also run checks after a new dev deployment, trigger Jobs from the existing CronJobs after rollout:
+Run the OpenShift checks only after a new dev build/rollout, or when explicitly validating the deployed environment:
 
 ```bash
-oc rollout status deployment/<deployment-name> -n rit-genai-naga-dev
+cd AI_Tutor_Analysis
+bash scripts/run_backend_build_deploy_quality_check.sh
 
-oc create job ai-tutor-backend-post-deploy-check-$(date +%s) \
-  --from=cronjob/ai-tutor-backend-scheduled-quality-checks \
-  -n rit-genai-naga-dev
-
-oc create job ai-tutor-frontend-post-deploy-check-$(date +%s) \
-  --from=cronjob/ai-tutor-frontend-scheduled-quality-checks \
-  -n rit-genai-naga-dev
+cd ../NAGA-open-webui
+bash scripts/run_frontend_build_deploy_quality_check.sh
 ```
 
 Longer term, this should be handled by OpenShift Pipelines/Tekton or ArgoCD post-sync hooks instead of personal tokens or manual terminal commands.
 
 ## Current Limitations
 
-- OpenShift Playwright browser checks are not enabled by default because they need more memory.
+- OpenShift live Playwright requires real dev test accounts and a small homework PDF fixture ConfigMap.
 - GitHub Actions should not access VPN-only OpenShift dev services unless a secure service-account-based path is approved.
 - Grafana Cloud is external SaaS; if that is not acceptable, move metrics to OpenShift user-workload monitoring or an in-cluster Grafana/Prometheus setup.
 - The local Grafana stack is for demos and development, not production operation.
 
 ## Resource Guidance
 
-Current backend scheduled checks:
+Current backend post-deployment checks:
 
 - request: `100m CPU`, `256Mi memory`
 - limit: `500m CPU`, `512Mi memory`
+- marker expression: `live and (smoke or integration or health or external_service)`
 
-Current frontend Vitest scheduled checks:
+Current frontend live Playwright post-deployment checks:
 
-- request: `250m CPU`, `768Mi memory`
-- limit: `1 CPU`, `2Gi memory`
-
-Recommended OpenShift Playwright budget:
-
-- minimum request: `1 CPU`, `2Gi memory`
-- recommended limit: `2 CPU`, `4Gi memory`
-- safer for video/report-heavy runs: `2 CPU`, `6Gi memory`
+- request: `1 CPU`, `2Gi memory`
+- limit: `2 CPU`, `4Gi memory`
+- workers: `1`
+- video: `off`
 
 Internal Grafana OSS demo/team dashboard:
 

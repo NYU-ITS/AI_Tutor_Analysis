@@ -12,12 +12,12 @@ The goal is to move away from Grafana Cloud and keep test observability inside `
 - `ai-tutor-quality-grafana` for the team dashboard.
 - Grafana datasource pointing at the namespace Prometheus.
 - Three starter Grafana dashboards with the same basic layout:
-  - `AI Tutor Quality - OpenShift` for scheduled checks running inside OpenShift.
+  - `AI Tutor Quality - OpenShift` for post-deployment checks running inside OpenShift.
   - `AI Tutor Quality - GitHub` for GitHub Actions results once GitHub metrics are routed into the OpenShift metrics store.
   - `AI Tutor Quality - Local` for local demo/test runs pushed into the same store.
 - `ai-tutor-quality-grafana-provisioner` Job to create/update the Grafana datasource and dashboards through the Grafana API.
 - `ai-tutor-quality-artifact-viewer` route for the latest Playwright report copied into OpenShift object storage.
-- `ai-tutor-github-playwright-artifact-sync` CronJob, suspended by default until the GitHub read token is approved.
+- `ai-tutor-github-playwright-artifact-sync` one-time Job manifest for copying Playwright reports/videos after the GitHub read token is approved.
 
 ## Why Pushgateway Exists
 
@@ -59,9 +59,7 @@ oc apply -f k8s/observability/50-grafana-dashboard.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/51-github-dashboard.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/52-local-dashboard.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/60-grafana-provisioner-job.yaml -n rit-genai-naga-dev
-oc apply -f k8s/observability/70-github-metrics-sync.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/80-artifact-viewer.yaml -n rit-genai-naga-dev
-oc apply -f k8s/observability/90-github-playwright-artifact-sync.yaml -n rit-genai-naga-dev
 ```
 
 The Grafana Operator dashboard/datasource custom resources are kept in place, but dev showed that they can report success while Grafana itself still has no datasource. The provisioner Job is the reliable path for now: it uses the Grafana admin secret, creates the Prometheus datasource, imports the OpenShift/GitHub/Local dashboards, then exits.
@@ -73,11 +71,10 @@ oc delete job ai-tutor-quality-grafana-provisioner -n rit-genai-naga-dev
 oc apply -f k8s/observability/60-grafana-provisioner-job.yaml -n rit-genai-naga-dev
 ```
 
-Then point the backend and frontend quality Jobs at Pushgateway:
+Then point the backend and frontend post-deployment quality Jobs at Pushgateway:
 
 ```bash
 oc apply -f k8s/quality-checks/job.yaml -n rit-genai-naga-dev
-oc apply -f k8s/quality-checks/cronjob.yaml -n rit-genai-naga-dev
 ```
 
 For frontend:
@@ -85,8 +82,9 @@ For frontend:
 ```bash
 cd ../NAGA-open-webui
 oc apply -f k8s/quality-checks/job.yaml -n rit-genai-naga-dev
-oc apply -f k8s/quality-checks/cronjob.yaml -n rit-genai-naga-dev
 ```
+
+These `Job` manifests are not schedules. They run once when applied. The deploy/rebuild flow should delete the previous completed Job, wait for the related deployment rollout, then apply the Job again.
 
 ## Access
 
@@ -112,9 +110,9 @@ This folder implements the Prometheus/Grafana/bucket foundation first. PostgreSQ
 
 ## Current Data Sources
 
-- OpenShift scheduled Jobs can publish directly to `ai-tutor-quality-pushgateway`.
+- OpenShift post-deployment Jobs can publish directly to `ai-tutor-quality-pushgateway`.
 - Local runs can publish to Pushgateway when port-forwarded or run inside the cluster.
-- GitHub Actions uploads Prometheus metrics as workflow artifacts. `ai-tutor-github-quality-metrics-sync` runs inside OpenShift, pulls the latest GitHub artifacts, and publishes them to the internal Pushgateway.
+- GitHub Actions uploads Prometheus metrics as workflow artifacts. `ai-tutor-github-quality-metrics-sync` can run inside OpenShift after the GitHub token is approved, pull the latest GitHub artifacts, and publish them to the internal Pushgateway.
 
 The GitHub sync needs a read-only GitHub token stored in OpenShift. Use a fine-grained token with read access to Actions/artifacts and metadata for `AI_Tutor_Analysis` and `NAGA-open-webui`.
 
@@ -125,47 +123,68 @@ oc create secret generic ai-tutor-github-metrics-sync-secret \
   --dry-run=client -o yaml | oc apply -f -
 ```
 
-Then apply the sync definition. It is intentionally suspended by default so it will not run until the token is approved:
+After the token is approved, run the sync Job manually from the deploy/release flow:
 
 ```bash
+oc delete job ai-tutor-github-quality-metrics-sync -n rit-genai-naga-dev --ignore-not-found
 oc apply -f k8s/observability/70-github-metrics-sync.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-github-quality-metrics-sync -n rit-genai-naga-dev -f
 ```
 
-After the token is approved, enable the schedule and optionally run one manual sync:
+This is intentionally not a schedule. It should run only when the team wants GitHub Actions results copied into the OpenShift dashboard.
+
+## Post-Deployment Trigger Pattern
+
+With the current user permissions, the deploy-and-test automation is run by scripts from a logged-in machine. A fully server-side trigger would need a service account with RBAC permissions to start builds, restart/wait for rollouts, create Jobs, and read logs. That permission is not available to this user, so this setup avoids it.
+
+Backend build, rollout, and quality check:
 
 ```bash
-oc patch cronjob ai-tutor-github-quality-metrics-sync \
-  -n rit-genai-naga-dev \
-  --type=merge \
-  -p '{"spec":{"suspend":false}}'
+bash scripts/run_backend_build_deploy_quality_check.sh
+```
 
-oc create job ai-tutor-github-quality-metrics-sync-manual \
-  -n rit-genai-naga-dev \
-  --from=cronjob/ai-tutor-github-quality-metrics-sync
+Backend post-deployment check only:
+
+```bash
+oc rollout status deployment/open-webui-mastering-homework -n rit-genai-naga-dev
+oc delete job ai-tutor-backend-post-deploy-quality-check -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/quality-checks/job.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-backend-post-deploy-quality-check -n rit-genai-naga-dev -f
+```
+
+Frontend build, rollout, and quality check:
+
+```bash
+cd ../NAGA-open-webui
+bash scripts/run_frontend_build_deploy_quality_check.sh
+```
+
+Frontend post-deployment check only:
+
+```bash
+cd ../NAGA-open-webui
+oc rollout status statefulset/open-webui -n rit-genai-naga-dev
+oc delete job ai-tutor-frontend-post-deploy-quality-check -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/quality-checks/job.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-frontend-post-deploy-quality-check -n rit-genai-naga-dev -f
 ```
 
 ## Artifact Direction
 
 The ObjectBucketClaim stores Playwright HTML reports and videos in OpenShift-owned object storage.
 
-The first artifact path syncs GitHub Playwright artifacts into the bucket. It is suspended until the same GitHub read token is approved:
+The first artifact path syncs GitHub Playwright artifacts into the bucket. The viewer can be applied any time:
 
 ```bash
 oc apply -f k8s/observability/80-artifact-viewer.yaml -n rit-genai-naga-dev
-oc apply -f k8s/observability/90-github-playwright-artifact-sync.yaml -n rit-genai-naga-dev
 ```
 
-After token approval:
+After token approval, run the artifact sync Job manually from the deploy/release flow:
 
 ```bash
-oc patch cronjob ai-tutor-github-playwright-artifact-sync \
-  -n rit-genai-naga-dev \
-  --type=merge \
-  -p '{"spec":{"suspend":false}}'
-
-oc create job ai-tutor-github-playwright-artifact-sync-manual \
-  -n rit-genai-naga-dev \
-  --from=cronjob/ai-tutor-github-playwright-artifact-sync
+oc delete job ai-tutor-github-playwright-artifact-sync -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/observability/90-github-playwright-artifact-sync.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-github-playwright-artifact-sync -n rit-genai-naga-dev -f
 ```
 
 Get the artifact viewer URL:

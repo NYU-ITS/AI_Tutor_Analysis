@@ -1,7 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ai-tutor-backend-scheduled-quality-check
+  name: ai-tutor-backend-post-deploy-quality-check
+  labels:
+    app.kubernetes.io/name: ai-tutor-backend-post-deploy-quality-check
+    app.kubernetes.io/component: backend-quality-check
+    app.kubernetes.io/part-of: ai-tutor-quality
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 3600
@@ -10,7 +14,7 @@ spec:
       automountServiceAccountToken: false
       restartPolicy: Never
       containers:
-        - name: backend-scheduled-quality-checks
+        - name: backend-post-deploy-quality-checks
           image: image-registry.openshift-image-registry.svc:5000/rit-genai-naga-dev/ai-tutor-quality-checks:latest
           imagePullPolicy: Always
           env:
@@ -27,7 +31,7 @@ spec:
             - name: QUALITY_BRANCH
               value: feature/test-suite-expansion
             - name: QUALITY_SOURCE
-              value: openshift-backend-scheduled-checks
+              value: openshift-backend-post-deploy-checks
             - name: QUALITY_RUN_ID
               valueFrom:
                 fieldRef:

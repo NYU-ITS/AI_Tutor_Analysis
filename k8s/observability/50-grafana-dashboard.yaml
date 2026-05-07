@@ -43,7 +43,7 @@ spec:
           },
           "options": {
             "mode": "markdown",
-            "content": "## AI Tutor Quality - OpenShift\nThis dashboard shows the latest scheduled checks running inside OpenShift dev. It keeps GitHub and local results separate so the current deployment status is easy to read."
+            "content": "## AI Tutor Quality - OpenShift\nThis dashboard shows only checks running inside OpenShift dev after deployment: backend live/smoke/health checks and frontend live Playwright workflows. GitHub CI results live on the separate GitHub dashboard."
           }
         },
         {
@@ -121,8 +121,8 @@ spec:
         {
           "id": 3,
           "type": "stat",
-          "title": "Frontend Unit Checks",
-          "description": "Latest frontend unit/component checks running from OpenShift.",
+          "title": "Frontend Live Playwright",
+          "description": "Latest live Playwright browser workflows running from OpenShift against the deployed frontend.",
           "datasource": {
             "type": "prometheus",
             "uid": "ai_tutor_quality_prometheus"
@@ -136,7 +136,7 @@ spec:
           "targets": [
             {
               "refId": "A",
-              "expr": "max(ai_tutor_quality_source_ok{environment=\"openshift-dev\",repository=\"NAGA-open-webui\",source=\"frontend_unit\"})",
+              "expr": "max(ai_tutor_quality_source_ok{environment=\"openshift-dev\",repository=\"NAGA-open-webui\",source=\"playwright_ui\"})",
               "instant": true,
               "range": false
             }
@@ -194,7 +194,7 @@ spec:
           "id": 4,
           "type": "stat",
           "title": "Checks Failing",
-          "description": "Latest failed/error count across OpenShift scheduled checks. This is the latest pushed value, not a sum of old runs.",
+          "description": "Latest failed/error count across OpenShift post-deployment checks. This is the latest pushed value, not a sum of old runs.",
           "datasource": {
             "type": "prometheus",
             "uid": "ai_tutor_quality_prometheus"

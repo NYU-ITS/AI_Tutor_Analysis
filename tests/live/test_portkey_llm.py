@@ -12,40 +12,31 @@ Optional: LLM_TEST_MODEL — short name (e.g. gpt-4o-mini) or full Portkey id; d
 """
 
 import json
-import os
 
 import pytest
 import requests
 
 from app.services.llm import (
-    PORTKEY_API_KEY,
     PORTKEY_BASE_URL,
     ask,
-    ask_with_images,
     chat,
 )
 from tests.helpers import get_llm_test_model, portkey_model_id_for_tests
+from tests.live._runtime import require_non_placeholder_env
 
 
-pytestmark = pytest.mark.live
-
-
-# Skip all tests in this module if credentials are missing or placeholder
-_skip_reason = None
-if not PORTKEY_API_KEY or PORTKEY_API_KEY in ("test-portkey-key", "mock-portkey-key", "your_api_key_here"):
-    _skip_reason = "No valid PORTKEY_API_KEY configured"
-
-if _skip_reason:
-    pytestmark = [pytest.mark.live, pytest.mark.skip(reason=_skip_reason)]
+pytestmark = [pytest.mark.live, pytest.mark.external_service]
 
 
 class TestPortkeyConnectivity:
     """Verify Portkey gateway is reachable and API key is accepted."""
 
+    @pytest.mark.health
     def test_portkey_api_key_is_valid(self):
         """Send a minimal request to verify the API key is accepted (not 401)."""
+        portkey_api_key = require_non_placeholder_env("PORTKEY_API_KEY")
         headers = {
-            "x-portkey-api-key": PORTKEY_API_KEY,
+            "x-portkey-api-key": portkey_api_key,
             "Content-Type": "application/json",
         }
         payload = {
@@ -75,6 +66,7 @@ class TestPortkeyConnectivity:
             prompt="Reply with the single word: OK",
             model=get_llm_test_model(),
             max_tokens=5,
+            max_retries=1,
         )
         assert isinstance(result, str)
         assert len(result.strip()) > 0
@@ -88,6 +80,7 @@ class TestPortkeyConnectivity:
             ],
             model=get_llm_test_model(),
             max_tokens=20,
+            max_retries=1,
             response_format={"type": "json_object"},
         )
         parsed = json.loads(result)
@@ -100,5 +93,6 @@ class TestPortkeyConnectivity:
             model=get_llm_test_model(),
             system="You must answer every question with the single word: PINEAPPLE",
             max_tokens=10,
+            max_retries=1,
         )
         assert "PINEAPPLE" in result.upper()

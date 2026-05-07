@@ -17,7 +17,7 @@ import pytest
 import requests
 
 
-pytestmark = pytest.mark.live
+pytestmark = [pytest.mark.live, pytest.mark.smoke, pytest.mark.health]
 
 BASE_URL = os.getenv("LIVE_FRONTEND_BASE_URL", "http://open-webui.rit-genai-naga-dev.svc:80").rstrip("/")
 
@@ -31,18 +31,6 @@ def _request(path: str, *, expected_content_type: str | None = None) -> requests
             f"{path} content-type was {content_type!r}, expected to include {expected_content_type!r}"
         )
     return response
-
-
-_skip_reason = None
-try:
-    home_response = requests.get(f"{BASE_URL}/", timeout=10, allow_redirects=True)
-    if home_response.status_code >= 500:
-        _skip_reason = f"Frontend returned a server error at {BASE_URL}: {home_response.status_code}"
-except Exception as exc:
-    _skip_reason = f"Frontend not reachable at {BASE_URL}: {exc}"
-
-if _skip_reason:
-    pytestmark = [pytest.mark.live, pytest.mark.skip(reason=_skip_reason)]
 
 
 class TestOpenWebUIFrontendSmoke:

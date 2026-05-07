@@ -17,7 +17,7 @@ import pytest
 import requests
 
 
-pytestmark = pytest.mark.live
+pytestmark = [pytest.mark.live, pytest.mark.integration, pytest.mark.smoke, pytest.mark.health]
 
 BASE_URL = os.getenv("LIVE_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
@@ -31,18 +31,6 @@ def _request(path: str, *, expected_content_type: str | None = None) -> requests
             f"{path} content-type was {content_type!r}, expected to include {expected_content_type!r}"
         )
     return response
-
-
-_skip_reason = None
-try:
-    health_response = requests.get(f"{BASE_URL}/", timeout=10)
-    if health_response.status_code != 200:
-        _skip_reason = f"Live API not healthy at {BASE_URL}: {health_response.status_code}"
-except Exception as exc:
-    _skip_reason = f"Live API not reachable at {BASE_URL}: {exc}"
-
-if _skip_reason:
-    pytestmark = [pytest.mark.live, pytest.mark.skip(reason=_skip_reason)]
 
 
 class TestTutorDashboardAPISmoke:

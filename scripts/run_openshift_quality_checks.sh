@@ -8,10 +8,12 @@ export LIVE_FRONTEND_BASE_URL="${LIVE_FRONTEND_BASE_URL:-http://open-webui.rit-g
 export QUALITY_METRICS_TARGET="${QUALITY_METRICS_TARGET:-127.0.0.1:9109}"
 export QUALITY_ENVIRONMENT="${QUALITY_ENVIRONMENT:-openshift-dev}"
 export QUALITY_REPOSITORY="${QUALITY_REPOSITORY:-AI_Tutor_Analysis}"
-export QUALITY_SOURCE="${QUALITY_SOURCE:-openshift-backend-scheduled-checks}"
+export QUALITY_SOURCE="${QUALITY_SOURCE:-openshift-backend-post-deploy-checks}"
 export QUALITY_FORWARD_SECONDS="${QUALITY_FORWARD_SECONDS:-75}"
 export QUALITY_PROMETHEUS_CONFIG_PATH="${QUALITY_PROMETHEUS_CONFIG_PATH:-/tmp/ai-tutor-grafana-cloud-prometheus.yml}"
 export QUALITY_PUSHGATEWAY_URL="${QUALITY_PUSHGATEWAY_URL:-}"
+export QUALITY_STRICT_LIVE_CHECKS="${QUALITY_STRICT_LIVE_CHECKS:-1}"
+export QUALITY_OPENSHIFT_MARKER_EXPR="${QUALITY_OPENSHIFT_MARKER_EXPR:-live and (smoke or integration or health or external_service)}"
 
 urlencode() {
   python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
@@ -56,7 +58,7 @@ pytest_status=0
 PYTHONPATH=student_analysis_pipeline python -m pytest \
   --noconftest \
   tests/live \
-  -m live \
+  -m "${QUALITY_OPENSHIFT_MARKER_EXPR}" \
   --junitxml=live-results/results.xml || pytest_status=$?
 
 python scripts/serve_test_metrics.py \
