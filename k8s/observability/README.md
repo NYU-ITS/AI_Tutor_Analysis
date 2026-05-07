@@ -109,7 +109,22 @@ This folder implements the Prometheus/Grafana/bucket foundation first. PostgreSQ
 
 - OpenShift scheduled Jobs can publish directly to `ai-tutor-quality-pushgateway`.
 - Local runs can publish to Pushgateway when port-forwarded or run inside the cluster.
-- GitHub Actions currently has a working Grafana Cloud path. For the final OpenShift-owned setup, GitHub results should either push to an authenticated OpenShift endpoint or be synced by an in-cluster pull job. That piece is intentionally separate because it needs an access decision from the team.
+- GitHub Actions uploads Prometheus metrics as workflow artifacts. `ai-tutor-github-quality-metrics-sync` runs inside OpenShift, pulls the latest GitHub artifacts, and publishes them to the internal Pushgateway.
+
+The GitHub sync needs a read-only GitHub token stored in OpenShift. Use a fine-grained token with read access to Actions/artifacts and metadata for `AI_Tutor_Analysis` and `NAGA-open-webui`.
+
+```bash
+oc create secret generic ai-tutor-github-metrics-sync-secret \
+  -n rit-genai-naga-dev \
+  --from-literal=GITHUB_TOKEN='<GITHUB_READ_TOKEN>' \
+  --dry-run=client -o yaml | oc apply -f -
+```
+
+Then apply the sync:
+
+```bash
+oc apply -f k8s/observability/70-github-metrics-sync.yaml -n rit-genai-naga-dev
+```
 
 ## Artifact Direction
 
