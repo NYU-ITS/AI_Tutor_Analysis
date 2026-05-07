@@ -1,0 +1,363 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: ai-tutor-quality-openshift
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-openshift
+    app.kubernetes.io/component: grafana-dashboard
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  instanceSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tutor-quality-grafana
+  uid: ai-tutor-quality-openshift
+  datasources:
+    - inputName: DS_PROMETHEUS
+      datasourceName: AI Tutor Quality Prometheus
+  json: |
+    {
+      "uid": "ai-tutor-quality-openshift",
+      "title": "AI Tutor Quality - OpenShift",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "tags": [
+        "ai-tutor",
+        "quality",
+        "openshift"
+      ],
+      "panels": [
+        {
+          "id": 1,
+          "type": "text",
+          "title": "Dashboard Guide",
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "## AI Tutor Quality - OpenShift\nThis dashboard shows the latest scheduled checks running inside OpenShift dev. It keeps GitHub and local results separate so the current deployment status is easy to read."
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Backend Service Checks",
+          "description": "Latest backend checks running from OpenShift against the deployed service and external dependencies.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ai_tutor_quality_prometheus"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 0,
+            "y": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(ai_tutor_quality_source_ok{environment=\"openshift-dev\",repository=\"AI_Tutor_Analysis\",source=\"live_observability\"})",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Needs attention",
+                      "color": "red"
+                    },
+                    "1": {
+                      "text": "Passing",
+                      "color": "green"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Frontend Unit Checks",
+          "description": "Latest frontend unit/component checks running from OpenShift.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ai_tutor_quality_prometheus"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(ai_tutor_quality_source_ok{environment=\"openshift-dev\",repository=\"NAGA-open-webui\",source=\"frontend_unit\"})",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "Needs attention",
+                      "color": "red"
+                    },
+                    "1": {
+                      "text": "Passing",
+                      "color": "green"
+                    }
+                  }
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Checks Failing",
+          "description": "Latest failed/error count across OpenShift scheduled checks. This is the latest pushed value, not a sum of old runs.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ai_tutor_quality_prometheus"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 12,
+            "y": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(ai_tutor_quality_checks_total{environment=\"openshift-dev\",status=~\"failed|error\"})",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 2
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Failure History",
+          "description": "Failures/errors over time by repository and check source.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ai_tutor_quality_prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (repository, source, status) (ai_tutor_quality_checks_total{environment=\"openshift-dev\",status=~\"failed|error\"})",
+              "legendFormat": "{{repository}} {{source}} {{status}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto",
+                "spanNulls": false
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          }
+        },
+        {
+          "id": 6,
+          "type": "table",
+          "title": "Latest Check Counts",
+          "description": "Latest check counts by repository, source, and status.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ai_tutor_quality_prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "ai_tutor_quality_checks_total{environment=\"openshift-dev\"}",
+              "format": "table",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "transformations": [
+            {
+              "id": "labelsToFields",
+              "options": {
+                "mode": "columns"
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "commit_sha": true,
+                  "environment": true,
+                  "instance": true,
+                  "job": true,
+                  "run_id": true
+                },
+                "renameByName": {
+                  "Value": "count",
+                  "repository": "repo",
+                  "source": "check source",
+                  "status": "result"
+                }
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            }
+          }
+        }
+      ]
+    }

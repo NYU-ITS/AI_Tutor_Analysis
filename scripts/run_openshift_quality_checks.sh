@@ -11,6 +11,46 @@ export QUALITY_REPOSITORY="${QUALITY_REPOSITORY:-AI_Tutor_Analysis}"
 export QUALITY_SOURCE="${QUALITY_SOURCE:-openshift-backend-scheduled-checks}"
 export QUALITY_FORWARD_SECONDS="${QUALITY_FORWARD_SECONDS:-75}"
 export QUALITY_PROMETHEUS_CONFIG_PATH="${QUALITY_PROMETHEUS_CONFIG_PATH:-/tmp/ai-tutor-grafana-cloud-prometheus.yml}"
+export QUALITY_PUSHGATEWAY_URL="${QUALITY_PUSHGATEWAY_URL:-}"
+
+urlencode() {
+  python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
+push_metrics_to_gateway() {
+  if [[ -z "${QUALITY_PUSHGATEWAY_URL}" ]]; then
+    return 0
+  fi
+
+  local metrics_file="/tmp/ai-tutor-quality-metrics.prom"
+  curl -fsS "http://${QUALITY_METRICS_TARGET}/metrics" -o "${metrics_file}"
+
+  local push_url="${QUALITY_PUSHGATEWAY_URL%/}/metrics/job/ai-tutor-quality"
+  push_url="${push_url}/environment/$(urlencode "${QUALITY_ENVIRONMENT}")"
+  push_url="${push_url}/repository/$(urlencode "${QUALITY_REPOSITORY}")"
+
+  curl -fsS --data-binary @"${metrics_file}" "${push_url}"
+  echo "Published AI Tutor quality metrics to Pushgateway."
+}
+
+forward_metrics_to_grafana_cloud() {
+  if [[ -z "${GRAFANA_CLOUD_PROMETHEUS_URL:-}" || -z "${GRAFANA_CLOUD_PROMETHEUS_USER:-}" || -z "${GRAFANA_CLOUD_PROMETHEUS_PASSWORD:-}" ]]; then
+    echo "Grafana Cloud variables are not set; skipping Grafana Cloud forwarding."
+    return 0
+  fi
+
+  python scripts/write_grafana_cloud_prometheus_config.py --output "${QUALITY_PROMETHEUS_CONFIG_PATH}"
+
+  prometheus \
+    --config.file="${QUALITY_PROMETHEUS_CONFIG_PATH}" \
+    --storage.tsdb.path=/tmp/prometheus \
+    --web.listen-address=127.0.0.1:9090 &
+  prometheus_pid=$!
+
+  sleep "${QUALITY_FORWARD_SECONDS}"
+  kill "${prometheus_pid}" >/dev/null 2>&1 || true
+  wait "${prometheus_pid}" >/dev/null 2>&1 || true
+}
 
 pytest_status=0
 PYTHONPATH=student_analysis_pipeline python -m pytest \
@@ -37,16 +77,7 @@ trap cleanup EXIT
 sleep 3
 curl -fsS "http://${QUALITY_METRICS_TARGET}/metrics" >/dev/null
 
-python scripts/write_grafana_cloud_prometheus_config.py --output "${QUALITY_PROMETHEUS_CONFIG_PATH}"
-
-prometheus \
-  --config.file="${QUALITY_PROMETHEUS_CONFIG_PATH}" \
-  --storage.tsdb.path=/tmp/prometheus \
-  --web.listen-address=127.0.0.1:9090 &
-prometheus_pid=$!
-
-sleep "${QUALITY_FORWARD_SECONDS}"
-kill "${prometheus_pid}" >/dev/null 2>&1 || true
-wait "${prometheus_pid}" >/dev/null 2>&1 || true
+push_metrics_to_gateway
+forward_metrics_to_grafana_cloud
 
 exit "${pytest_status}"

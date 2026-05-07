@@ -1,0 +1,107 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: ai-tutor-quality-github
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-github
+    app.kubernetes.io/component: grafana-dashboard
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  instanceSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tutor-quality-grafana
+  uid: ai-tutor-quality-github
+  datasources:
+    - inputName: DS_PROMETHEUS
+      datasourceName: AI Tutor Quality Prometheus
+  json: |
+    {
+      "uid": "ai-tutor-quality-github",
+      "title": "AI Tutor Quality - GitHub",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "1m",
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "tags": ["ai-tutor", "quality", "github"],
+      "panels": [
+        {
+          "id": 1,
+          "type": "text",
+          "title": "Dashboard Guide",
+          "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+          "options": {
+            "mode": "markdown",
+            "content": "## AI Tutor Quality - GitHub\nThis dashboard is for checks that run from GitHub Actions after code changes. It is separate from OpenShift so CI results are not confused with deployed-environment results."
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Backend Code Checks",
+          "description": "Latest backend regression checks from GitHub Actions.",
+          "datasource": {"type": "prometheus", "uid": "ai_tutor_quality_prometheus"},
+          "gridPos": {"h": 5, "w": 6, "x": 0, "y": 4},
+          "targets": [{"refId": "A", "expr": "max(ai_tutor_quality_source_ok{environment=\"github-actions\",repository=\"AI_Tutor_Analysis\",source=\"backend_regression\"})", "instant": true, "range": false}],
+          "fieldConfig": {"defaults": {"unit": "none", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "mappings": [{"type": "value", "options": {"0": {"text": "Needs attention", "color": "red"}, "1": {"text": "Passing", "color": "green"}}}]}, "overrides": []},
+          "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none", "justifyMode": "auto"}
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Frontend Unit Checks",
+          "description": "Latest frontend unit/component checks from GitHub Actions.",
+          "datasource": {"type": "prometheus", "uid": "ai_tutor_quality_prometheus"},
+          "gridPos": {"h": 5, "w": 6, "x": 6, "y": 4},
+          "targets": [{"refId": "A", "expr": "max(ai_tutor_quality_source_ok{environment=\"github-actions\",repository=\"NAGA-open-webui\",source=\"frontend_unit\"})", "instant": true, "range": false}],
+          "fieldConfig": {"defaults": {"unit": "none", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "mappings": [{"type": "value", "options": {"0": {"text": "Needs attention", "color": "red"}, "1": {"text": "Passing", "color": "green"}}}]}, "overrides": []},
+          "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none", "justifyMode": "auto"}
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Browser Workflow Checks",
+          "description": "Latest Playwright UI workflow checks from GitHub Actions.",
+          "datasource": {"type": "prometheus", "uid": "ai_tutor_quality_prometheus"},
+          "gridPos": {"h": 5, "w": 6, "x": 12, "y": 4},
+          "targets": [{"refId": "A", "expr": "max(ai_tutor_quality_source_ok{environment=\"github-actions\",source=\"playwright_ui\"})", "instant": true, "range": false}],
+          "fieldConfig": {"defaults": {"unit": "none", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}, "mappings": [{"type": "value", "options": {"0": {"text": "Needs attention", "color": "red"}, "1": {"text": "Passing", "color": "green"}}}]}, "overrides": []},
+          "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none", "justifyMode": "auto"}
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Checks Needing Attention",
+          "description": "Latest failed/error count from GitHub Actions. This is not accumulated across old runs.",
+          "datasource": {"type": "prometheus", "uid": "ai_tutor_quality_prometheus"},
+          "gridPos": {"h": 5, "w": 6, "x": 18, "y": 4},
+          "targets": [{"refId": "A", "expr": "sum(ai_tutor_quality_checks_total{environment=\"github-actions\",status=~\"failed|error\"})", "instant": true, "range": false}],
+          "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 2}]}}, "overrides": []},
+          "options": {"reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none", "justifyMode": "auto"}
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Checks Needing Attention Over Time",
+          "description": "Failed/error counts over time by repository and check type.",
+          "datasource": {"type": "prometheus", "uid": "ai_tutor_quality_prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+          "targets": [{"refId": "A", "expr": "sum by (repository, source, status) (ai_tutor_quality_checks_total{environment=\"github-actions\",status=~\"failed|error\"})", "legendFormat": "{{repository}} {{source}} {{status}}"}],
+          "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10, "showPoints": "auto", "spanNulls": false}}, "overrides": []},
+          "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "single", "sort": "none"}}
+        },
+        {
+          "id": 7,
+          "type": "table",
+          "title": "Latest Check Details",
+          "description": "Latest check counts by repo, check type, and result.",
+          "datasource": {"type": "prometheus", "uid": "ai_tutor_quality_prometheus"},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+          "targets": [{"refId": "A", "expr": "ai_tutor_quality_checks_total{environment=\"github-actions\"}", "format": "table", "instant": true, "range": false}],
+          "transformations": [{"id": "labelsToFields", "options": {"mode": "columns"}}, {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "environment": true, "instance": true, "job": true}, "renameByName": {"Value": "count", "repository": "repo", "source": "check type", "status": "result"}}}],
+          "options": {"showHeader": true, "cellHeight": "sm", "footer": {"show": false}}
+        }
+      ]
+    }

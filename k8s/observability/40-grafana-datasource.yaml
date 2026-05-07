@@ -1,0 +1,22 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: ai-tutor-quality-prometheus
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-prometheus
+    app.kubernetes.io/component: grafana-datasource
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  instanceSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tutor-quality-grafana
+  uid: ai_tutor_quality_prometheus
+  datasource:
+    name: AI Tutor Quality Prometheus
+    type: prometheus
+    access: proxy
+    url: http://ai-tutor-quality-prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s

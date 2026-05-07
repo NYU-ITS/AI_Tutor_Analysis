@@ -1,0 +1,45 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: ai-tutor-quality-grafana
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-grafana
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  version: 12.4.1
+  config:
+    log:
+      mode: console
+    auth:
+      disable_login_form: "false"
+    security:
+      admin_user: admin
+    users:
+      viewers_can_edit: "false"
+  deployment:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: grafana
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+  persistentVolumeClaim:
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: vastdata-cloud
+      resources:
+        requests:
+          storage: 5Gi
+  route:
+    spec:
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect

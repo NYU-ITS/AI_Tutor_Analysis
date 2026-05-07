@@ -43,21 +43,8 @@ spec:
                   value: openshift-build
                 - name: QUALITY_FORWARD_SECONDS
                   value: "75"
-                - name: GRAFANA_CLOUD_PROMETHEUS_URL
-                  valueFrom:
-                    secretKeyRef:
-                      name: ai-tutor-grafana-cloud-secret
-                      key: GRAFANA_CLOUD_PROMETHEUS_URL
-                - name: GRAFANA_CLOUD_PROMETHEUS_USER
-                  valueFrom:
-                    secretKeyRef:
-                      name: ai-tutor-grafana-cloud-secret
-                      key: GRAFANA_CLOUD_PROMETHEUS_USER
-                - name: GRAFANA_CLOUD_PROMETHEUS_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: ai-tutor-grafana-cloud-secret
-                      key: GRAFANA_CLOUD_PROMETHEUS_PASSWORD
+                - name: QUALITY_PUSHGATEWAY_URL
+                  value: http://ai-tutor-quality-pushgateway:9091
                 - name: PORTKEY_API_KEY
                   valueFrom:
                     secretKeyRef:

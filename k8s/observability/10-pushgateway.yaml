@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-tutor-quality-pushgateway
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-pushgateway
+    app.kubernetes.io/component: metrics-ingest
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tutor-quality-pushgateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-tutor-quality-pushgateway
+        app.kubernetes.io/component: metrics-ingest
+        app.kubernetes.io/part-of: ai-tutor-observability
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: pushgateway
+          image: prom/pushgateway:v1.11.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9091
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-tutor-quality-pushgateway
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-pushgateway
+    app.kubernetes.io/component: metrics-ingest
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  selector:
+    app.kubernetes.io/name: ai-tutor-quality-pushgateway
+  ports:
+    - name: http
+      port: 9091
+      targetPort: http

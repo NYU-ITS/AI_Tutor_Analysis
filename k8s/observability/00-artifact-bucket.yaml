@@ -1,0 +1,11 @@
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: ai-tutor-test-artifacts-bucket
+  labels:
+    app.kubernetes.io/name: ai-tutor-test-artifacts
+    app.kubernetes.io/component: artifact-storage
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  generateBucketName: ai-tutor-test-artifacts
+  storageClassName: openshift-storage.noobaa.io

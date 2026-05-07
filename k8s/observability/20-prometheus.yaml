@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-tutor-quality-prometheus-config
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-prometheus
+    app.kubernetes.io/component: metrics-store
+    app.kubernetes.io/part-of: ai-tutor-observability
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: ai_tutor_quality_pushgateway
+        honor_labels: true
+        static_configs:
+          - targets:
+              - ai-tutor-quality-pushgateway:9091
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-tutor-quality-prometheus-data
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-prometheus
+    app.kubernetes.io/component: metrics-store
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: vastdata-cloud
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-tutor-quality-prometheus
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-prometheus
+    app.kubernetes.io/component: metrics-store
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tutor-quality-prometheus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-tutor-quality-prometheus
+        app.kubernetes.io/component: metrics-store
+        app.kubernetes.io/part-of: ai-tutor-observability
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.2.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=15d
+            - --web.listen-address=0.0.0.0:9090
+          ports:
+            - name: http
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: config
+          configMap:
+            name: ai-tutor-quality-prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: ai-tutor-quality-prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-tutor-quality-prometheus
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-prometheus
+    app.kubernetes.io/component: metrics-store
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  selector:
+    app.kubernetes.io/name: ai-tutor-quality-prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
