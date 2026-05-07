@@ -120,10 +120,23 @@ oc create secret generic ai-tutor-github-metrics-sync-secret \
   --dry-run=client -o yaml | oc apply -f -
 ```
 
-Then apply the sync:
+Then apply the sync definition. It is intentionally suspended by default so it will not run until the token is approved:
 
 ```bash
 oc apply -f k8s/observability/70-github-metrics-sync.yaml -n rit-genai-naga-dev
+```
+
+After the token is approved, enable the schedule and optionally run one manual sync:
+
+```bash
+oc patch cronjob ai-tutor-github-quality-metrics-sync \
+  -n rit-genai-naga-dev \
+  --type=merge \
+  -p '{"spec":{"suspend":false}}'
+
+oc create job ai-tutor-github-quality-metrics-sync-manual \
+  -n rit-genai-naga-dev \
+  --from=cronjob/ai-tutor-github-quality-metrics-sync
 ```
 
 ## Artifact Direction
