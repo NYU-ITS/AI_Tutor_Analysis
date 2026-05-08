@@ -184,13 +184,15 @@ Files:
 OpenShift objects:
 
 - BuildConfig/ImageStream image: `ai-tutor-quality-checks`
+- Role/RoleBinding: `ai-tutor-quality-checks-secret-reader`
 - post-deployment Job: `ai-tutor-backend-post-deploy-quality-check`
 
 Automatic trigger:
 
 - `ai-tutor-quality-checks` has an `ImageChange` trigger on `open-webui-mastering-homework:latest`
 - when the backend app build updates that image stream tag, OpenShift starts the quality-check image build
-- the quality-check build runs `scripts/run_openshift_quality_checks.sh` as its `postCommit` hook
+- the quality-check build runs `scripts/run_openshift_quality_checks_from_build.sh` as its `postCommit` hook
+- the hook reads required live-check secrets from `open-webui-mastering-homework-secret` through the Kubernetes API using a narrowly scoped Role
 - metrics are pushed to the in-namespace Pushgateway
 
 What it checks:

@@ -12,8 +12,11 @@ For the full local, GitHub Actions, and OpenShift testing picture, see:
 ## What It Creates
 
 - `ai-tutor-quality-checks` backend test image build
+- `ai-tutor-quality-checks-secret-reader` Role/RoleBinding for the OpenShift `builder` service account
 
 The quality checks run as the `postCommit` hook of the quality-check image build. The build uses resources only while it runs, sends metrics to the OpenShift Pushgateway, then exits.
+
+The hook loads required live-check secrets from `open-webui-mastering-homework-secret` at runtime through the Kubernetes API. Do not put these values in `dockerStrategy.env`; OpenShift renders Docker strategy env as image `ENV` instructions, which can expose values in build logs and image layers.
 
 The quality-check BuildConfig has an `ImageChange` trigger on:
 
@@ -60,7 +63,7 @@ Expected OpenShift flow:
 open-webui-mastering-homework build finishes
 open-webui-mastering-homework:latest image stream updates
 ai-tutor-quality-checks build starts from the image-change trigger
-ai-tutor-quality-checks postCommit runs scripts/run_openshift_quality_checks.sh
+ai-tutor-quality-checks postCommit runs scripts/run_openshift_quality_checks_from_build.sh
 metrics are pushed to ai-tutor-quality-pushgateway
 ```
 
