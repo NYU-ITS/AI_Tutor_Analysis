@@ -11,6 +11,8 @@ spec:
   failedBuildsHistoryLimit: 2
   successfulBuildsHistoryLimit: 2
   runPolicy: Serial
+  nodeSelector:
+    topology.kubernetes.io/region: rcdc
   source:
     type: Git
     git:

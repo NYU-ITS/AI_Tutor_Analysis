@@ -242,6 +242,7 @@ The log uploader redacts known secret environment values and common bearer token
 Required artifact bucket wiring:
 
 - BuildConfig mounts `ai-tutor-test-artifacts-bucket` at `/var/run/ai-tutor-artifacts-secret` and sets non-secret bucket host/name/port values.
+- BuildConfig pins quality builds to `topology.kubernetes.io/region=rcdc`, matching the artifact components and avoiding cross-region object-storage connectivity surprises.
 - Explicit Job uses `envFrom` for the ObjectBucketClaim Secret and ConfigMap.
 - In-cluster bucket clients set `BUCKET_TLS_VERIFY=false` because the internal bucket endpoint uses the OpenShift self-signed service chain.
 
