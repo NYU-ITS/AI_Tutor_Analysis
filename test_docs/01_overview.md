@@ -104,3 +104,11 @@ pytest --noconftest tests/live -m "live and (smoke or integration or health or e
 ```
 
 The hosted GitHub runner already has Docker available, so `testcontainers[postgres]` works without any extra setup.
+
+GitHub Actions is the owner for this non-live backend suite. The OpenShift backend quality BuildConfig intentionally runs only the deployed-environment live subset after backend image updates:
+
+```bash
+pytest --noconftest tests/live -m "live and (smoke or integration or health or external_service)"
+```
+
+OpenShift sets `QUALITY_STRICT_LIVE_CHECKS=1`, reads `portkey-api-key`, `pipeline-database-url`, and `database-url` from `open-webui-mastering-homework-secret`, and publishes quality metrics to the namespace Pushgateway. See `../AI_TUTOR_TESTING_OBSERVABILITY.md` and `../k8s/quality-checks/README.md` for the current OpenShift trigger, secret, resource, and dashboard details.

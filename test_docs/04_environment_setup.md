@@ -4,7 +4,7 @@
 
 | Requirement | Why | How to check |
 |---|---|---|
-| Python 3.12 or 3.13 | Matches CI (`.github/workflows/tests.yml` uses 3.13) | `python --version` |
+| Python 3.12 | Matches CI (`.github/workflows/tests.yml` uses 3.12) | `python --version` |
 | Docker Desktop **running** | `tests/conftest.py` spins up a `testcontainers.postgres.PostgresContainer("postgres:16")` at import time. Without Docker, **no** test will even collect — not even unit tests. | `docker info` |
 | ~2 GB free disk | Postgres image is cached on first run |  |
 | Internet on first run only | Pulls `postgres:16` image |  |
@@ -15,21 +15,20 @@ the deployed-environment checks (see below).
 
 ## One-time setup
 
-From the repo root:
+The shared project environment is `oi`:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+conda activate oi
 pip install --upgrade pip
 pip install -r student_analysis_pipeline/requirements.txt
 pip install -r tests/requirements-testing.txt
 ```
 
-Or, if you prefer conda:
+If `oi` is not available on a fresh machine, create an equivalent Python 3.12 environment:
 
 ```bash
-conda create -n ai_tutor python=3.12 -y
-conda activate ai_tutor
+conda create -n oi python=3.12 -y
+conda activate oi
 pip install -r student_analysis_pipeline/requirements.txt -r tests/requirements-testing.txt
 ```
 
@@ -37,12 +36,10 @@ pip install -r student_analysis_pipeline/requirements.txt -r tests/requirements-
 
 ```bash
 # Default: all unit + integration, live skipped (matches CI)
-pytest
+bash scripts/run_pytest_with_reports.sh
 
-# Everything including live (requires a real PORTKEY_API_KEY and
-# the OWUI DB configured via env vars)
+# Explicit deployed-environment checks only
 pytest -m "live and (smoke or integration or health or external_service)"
-pytest -m ""        # ignore markers, run everything
 
 # Narrower slices
 pytest -m unit                              # fast, no Docker usable — but conftest still needs it
@@ -88,6 +85,14 @@ Put these in a `.env` file at the repo root — `load_dotenv()` picks it up.
 In OpenShift, the quality Job injects them from Kubernetes Secrets and sets
 `QUALITY_STRICT_LIVE_CHECKS=1` so missing values fail the quality gate.
 
+The current OpenShift backend automation reads these secret keys from `open-webui-mastering-homework-secret`:
+
+- `portkey-api-key`
+- `pipeline-database-url`
+- `database-url`
+
+OpenShift does not run the default unit/integration suite. It runs only `tests/live` with the marker expression `live and (smoke or integration or health or external_service)`.
+
 ## Environment differences at a glance
 
 | Aspect | Unit | Integration | Live |
@@ -100,13 +105,14 @@ In OpenShift, the quality Job injects them from Kubernetes Secrets and sets
 
 ## CI
 
-`.github/workflows/tests.yml` runs on pushes to `auto_pipeline` and `main`:
+`.github/workflows/tests.yml` runs on pushes to `auto_pipeline`, `main`, and `feature/test-suite-expansion` when backend test-relevant files change:
 
 1. Checkout the repo.
-2. Set up Python 3.13.
+2. Set up Python 3.12.
 3. Install `student_analysis_pipeline/requirements.txt` + `tests/requirements-testing.txt`.
 4. `bash scripts/run_pytest_with_reports.sh`.
 5. Upload JUnit, coverage, and quality metrics artifacts.
+6. Forward metrics to Grafana Cloud when Grafana secrets are configured.
 
 Docker is pre-installed on GitHub-hosted `ubuntu-latest` runners, so nothing
 extra is required.

@@ -93,6 +93,7 @@ Run:
 
 ```bash
 cd AI_Tutor_Analysis
+conda activate oi
 pip install -r student_analysis_pipeline/requirements.txt
 pip install -r tests/requirements-testing.txt
 bash scripts/run_pytest_with_reports.sh
@@ -203,29 +204,35 @@ For Grafana Cloud, import:
 
 - `observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
 
-That dashboard separates GitHub checks from OpenShift scheduled checks and uses latest-run counts instead of accumulating repeated runs.
+That dashboard separates GitHub checks from OpenShift deployed-environment checks and uses latest-run counts instead of accumulating repeated runs.
 
-## OpenShift Scheduled Quality Checks
+## OpenShift Build-Triggered Quality Checks
 
-OpenShift dev scheduled checks are short-lived Jobs, not long-running pods.
+OpenShift dev quality checks are short-lived build hooks or explicit rerun Jobs, not long-running pods or CronJobs.
 
 Namespace:
 
 - `rit-genai-naga-dev`
 
-Backend scheduled CronJob:
+Backend build-triggered checks:
 
-- `ai-tutor-backend-scheduled-quality-checks`
-- runs daily at `1:00 AM America/New_York`
-- forwards metrics to Grafana Cloud
+- `ai-tutor-quality-checks`
+- triggers when `open-webui-mastering-homework:latest` updates
+- runs `tests/live` with `live and (smoke or integration or health or external_service)`
+- reads `portkey-api-key`, `database-url`, and `pipeline-database-url` from `open-webui-mastering-homework-secret`
+- pushes metrics to the namespace Pushgateway
 - uses files under `k8s/quality-checks/`
 
-Frontend scheduled CronJob lives in `NAGA-open-webui`:
+Frontend build-triggered checks live in `NAGA-open-webui`:
 
-- `ai-tutor-frontend-scheduled-quality-checks`
-- runs daily at `1:00 AM America/New_York`
-- currently runs frontend Vitest checks only
-- Playwright remains in GitHub Actions unless a larger OpenShift browser-test budget is approved
+- `ai-tutor-frontend-quality-checks`
+- triggers when the `open-webui:latest` ImageStream imports the external frontend image digest
+- preserves the existing external registry and Helm-managed StatefulSet image flow
+- runs live Playwright against the deployed dev frontend
+- reads credentials from `ai-tutor-playwright-live-secret`
+- uses the tracked PDF fixture `NAGA-open-webui/playwright/fixtures/Math_HW.pdf`
+
+GitHub Actions owns backend unit/non-live integration tests, frontend Vitest, and mocked Playwright. OpenShift owns deployed-environment checks only.
 
 ## OpenShift Deployment
 

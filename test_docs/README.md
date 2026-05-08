@@ -6,7 +6,7 @@
 > to understand *what* is tested, *why*, and *how to run it* locally or
 > in CI.
 
-For the current local, GitHub Actions, Grafana Cloud, and OpenShift dev deployment/testing setup, see [`../AI_TUTOR_TESTING_OBSERVABILITY.md`](../AI_TUTOR_TESTING_OBSERVABILITY.md). This folder focuses on the backend pytest suite itself.
+For the current local, GitHub Actions, Grafana Cloud, and OpenShift dev deployment/testing setup, see [`../AI_TUTOR_TESTING_OBSERVABILITY.md`](../AI_TUTOR_TESTING_OBSERVABILITY.md). That overview is the canonical source for cross-repo stage ownership, OpenShift triggers, secrets, resources, and dashboard behavior. This folder focuses on the backend pytest suite itself.
 
 ---
 
@@ -21,9 +21,9 @@ For the current local, GitHub Actions, Grafana Cloud, and OpenShift dev deployme
 
 ---
 
-## TL;DR (refreshed 2026-05-07)
+## TL;DR (refreshed 2026-05-08)
 
-| Metric | Before 2026-04 audit | Current (2026-05-07) |
+| Metric | Before 2026-04 audit | Current (2026-05-08) |
 |---|---:|---:|
 | Total tests | 104 | **157** |
 | Unit tests | 25 | **34** |
@@ -37,8 +37,11 @@ For the current local, GitHub Actions, Grafana Cloud, and OpenShift dev deployme
 Run everything:
 
 ```bash
+conda activate oi
 # Docker must be running (testcontainers spins up a real Postgres 16)
-pytest                    # default: all non-live tests
-pytest -m "live and (smoke or integration or health or external_service)"
-pytest --cov=app          # local coverage report (see 06_coverage_roadmap.md)
+bash scripts/run_pytest_with_reports.sh
+pytest -m "live and (smoke or integration or health or external_service)"  # explicit deployed-environment checks
+pytest --cov=app                                                        # local coverage report
 ```
+
+GitHub Actions runs the non-live backend suite. OpenShift runs only deployed-environment checks after backend image updates, using the marker expression `live and (smoke or integration or health or external_service)`.

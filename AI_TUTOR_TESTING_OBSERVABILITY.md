@@ -1,30 +1,40 @@
 # AI Tutor Testing and Observability
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
-This document describes the current AI Tutor testing and observability setup across local development, GitHub Actions, Grafana Cloud, and OpenShift dev.
+This is the source-of-truth overview for AI Tutor test ownership, OpenShift quality checks, metrics, secrets, and dashboard expectations across the backend `AI_Tutor_Analysis` repo and the frontend `NAGA-open-webui` repo.
 
-## Current Scope
+## Scope and Repositories
 
-Two repositories are involved:
+Two repositories are involved and are deployed independently:
 
 - Backend analytics service: `AI_Tutor_Analysis`, branch `feature/test-suite-expansion`
-- Frontend dashboard: `NAGA-open-webui`, branch `rs/ai-tutor-tests`
+- Frontend OpenWebUI app: `NAGA-open-webui`, branch `rs/ai-tutor-tests`
 
-The frontend calls the backend analytics service, but the repositories are built and deployed independently.
+The frontend calls backend analytics services for AI Tutor workflows, but the repos have separate build/deploy lifecycles on OpenShift. The test strategy therefore separates code-level CI from deployed-environment validation.
 
-## Naming Convention
+## Stage Ownership
 
-- `backend` means checks for `AI_Tutor_Analysis`.
-- `frontend` means checks for `NAGA-open-webui`.
-- OpenShift checks are deployed-environment checks. They are intentionally not scheduled because GitHub Actions already runs the code-level test suites.
-- We avoid using `live` in Job names where it can be confused with production traffic. When a check touches the deployed dev environment, the docs call that a deployed-environment check.
+GitHub Actions owns code-level checks:
 
-## Local Backend Checks
+- backend pytest unit and non-live integration tests
+- frontend Vitest unit/component tests
+- mocked Playwright UI checks
+- artifacts and Grafana Cloud metrics for CI runs
 
-Local backend checks are run from `AI_Tutor_Analysis`.
+OpenShift owns deployed-environment checks:
 
-The default pytest setup skips external-service checks:
+- backend smoke checks
+- backend live integration checks
+- backend health checks
+- backend external-service checks, including Portkey and databases
+- frontend live Playwright browser workflows against the deployed dev frontend
+
+OpenShift intentionally does not repeat the tests that already ran in GitHub Actions. This keeps resource use low and makes failures easier to interpret: GitHub failures mean code/test regressions, while OpenShift failures mean the deployed dev environment, credentials, route/service wiring, or external dependencies need attention.
+
+## Backend Local Checks
+
+Run from `AI_Tutor_Analysis`:
 
 ```bash
 conda activate oi
@@ -48,11 +58,11 @@ It exposes:
 - `http://127.0.0.1:9109/metrics`
 - `http://127.0.0.1:9109/`
 
-## Local Frontend Checks
+Local defaults skip OpenShift-only live checks unless the required live environment variables are explicitly set.
 
-Local frontend checks are run from `NAGA-open-webui`.
+## Frontend Local Checks
 
-Fast AI Tutor frontend checks:
+Run from `NAGA-open-webui`:
 
 ```bash
 conda activate oi
@@ -67,230 +77,314 @@ npm run test:frontend -- --run \
 Mocked Playwright dashboard checks:
 
 ```bash
-conda activate oi
-cd NAGA-open-webui
 PLAYWRIGHT_BROWSERS_PATH=0 npm run test:e2e:ui -- playwright/tests/ai-tutor-dashboard.mocked.spec.ts
 ```
 
-Live Playwright workflows are scaffolded but require real accounts, a reachable app, and a homework PDF. They are not enabled by default.
+Live Playwright requires real dev accounts, a reachable app, and a homework PDF fixture. OpenShift uses the tracked fixture in `NAGA-open-webui/playwright/fixtures/Math_HW.pdf`.
 
 ## GitHub Actions
 
-### Backend GitHub Workflow
+### Backend Workflow
 
 File:
 
 - `.github/workflows/tests.yml`
 
-What it runs:
+Runs:
 
-- backend pytest checks
-- default non-live unit and integration tests
-- coverage reporting
-- test artifact upload
-- Grafana Cloud metric forwarding when Grafana secrets are configured
+- pytest unit and non-live integration tests
+- coverage output
+- JUnit artifact upload
+- quality metrics artifact upload
+- Grafana Cloud forwarding when Grafana secrets are configured
 
-What it does not do:
+Does not run:
 
-- it does not log into OpenShift
-- it does not use personal `oc login` tokens
-- it does not run VPN-only OpenShift dev checks
+- OpenShift login
+- personal `oc` tokens
+- VPN-only OpenShift dev checks
+- live Portkey/database/deployed-service checks
 
-### Frontend GitHub Workflow
+### Frontend Workflow
 
 File in `NAGA-open-webui`:
 
 - `.github/workflows/ai-tutor-playwright-tests.yml`
 
-What it runs:
+Runs:
 
 - AI Tutor Vitest unit/component checks
 - mocked Playwright dashboard workflows
 - Playwright report/video artifacts
-- Grafana Cloud metric forwarding when Grafana secrets are configured
+- quality metrics artifact upload
+- Grafana Cloud forwarding when Grafana secrets are configured
 
-Live Playwright checks are environment-gated. They run only when explicitly enabled with the required credentials and URLs.
+Live Playwright is environment gated and is not the default GitHub path. The preferred deployed-environment live browser validation is the OpenShift frontend quality BuildConfig.
 
-## Grafana Cloud
-
-Grafana receives test metrics from:
-
-- GitHub backend workflow
-- GitHub frontend workflow
-- OpenShift backend build-triggered deployed-environment quality checks
-- OpenShift frontend live Playwright post-deployment quality checks
-
-Required GitHub repository secrets:
-
-- `GRAFANA_CLOUD_PROMETHEUS_URL`
-- `GRAFANA_CLOUD_PROMETHEUS_USER`
-- `GRAFANA_CLOUD_PROMETHEUS_PASSWORD`
-
-Required OpenShift secret:
-
-- `ai-tutor-grafana-cloud-secret`
-
-The current metrics are test telemetry only:
-
-- pass/fail/error counts
-- check durations
-- repository/branch/source labels
-- commit SHA
-- service/check names
-
-The setup should not send secrets, database rows, student content, API response bodies, or user submissions to Grafana Cloud.
-
-## Grafana Dashboard JSON
-
-Backend/GitHub/OpenShift overview:
-
-- `observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
-
-Frontend GitHub/OpenShift dashboard in `NAGA-open-webui`:
-
-- `observability/grafana/dashboards/ai-tutor-frontend-github-quality.json`
-
-Important dashboard behavior:
-
-- stat panels show the latest reported run per source
-- pass counts do not stack across repeated runs in the selected time window
-- failure panels separate GitHub checks from OpenShift deployed-environment checks
-
-## Local Grafana Demo
-
-The backend repo still includes a local Prometheus/Grafana demo:
-
-```bash
-cd AI_Tutor_Analysis/observability
-docker compose up -d
-```
-
-Use this for local demos only. The OpenShift dev setup uses the namespace Pushgateway, Prometheus, and Grafana manifests in `k8s/observability`.
-
-## OpenShift Dev Setup
+## OpenShift Namespace
 
 Namespace:
 
 - `rit-genai-naga-dev`
 
-### Backend Build-Triggered Quality Checks
+Observability endpoint:
+
+- Pushgateway: `http://ai-tutor-quality-pushgateway:9091`
+
+Quality builds and jobs are short-lived. There are no recurring CronJobs for these test runs.
+
+## Backend OpenShift Quality Checks
 
 Files:
 
 - `k8s/quality-checks/buildconfig.yaml`
 - `k8s/quality-checks/job.yaml`
 - `k8s/quality-checks/README.md`
+- `scripts/run_openshift_quality_checks_from_build.sh`
+- `scripts/run_openshift_quality_checks.sh`
 
-OpenShift objects:
+Objects:
 
-- BuildConfig/ImageStream image: `ai-tutor-quality-checks`
-- post-deployment Job: `ai-tutor-backend-post-deploy-quality-check`
+- ImageStream: `ai-tutor-quality-checks`
+- BuildConfig: `ai-tutor-quality-checks`
+- optional explicit rerun Job: `ai-tutor-backend-post-deploy-quality-check`
 
 Automatic trigger:
 
-- `ai-tutor-quality-checks` has an `ImageChange` trigger on `open-webui-mastering-homework:latest`
-- when the backend app build updates that image stream tag, OpenShift starts the quality-check image build
-- the quality-check build runs `scripts/run_openshift_quality_checks_from_build.sh` as its `postCommit` hook
-- the hook reads required live-check secrets from `open-webui-mastering-homework-secret` through a read-only BuildConfig secret volume
-- metrics are pushed to the in-namespace Pushgateway
+```text
+open-webui-mastering-homework:latest ImageStreamTag update
+-> ai-tutor-quality-checks BuildConfig starts
+-> quality_checks/Dockerfile builds the quality image
+-> postCommit runs scripts/run_openshift_quality_checks_from_build.sh
+-> live pytest checks run from inside OpenShift
+-> metrics are pushed to ai-tutor-quality-pushgateway
+```
 
-What it checks:
+Marker expression:
 
-- `smoke`: deployed backend/frontend routes respond
-- `integration`: deployed backend API contract checks through read-only endpoints
-- `health`: backend health, frontend health route, database connectivity, and Portkey credential/gateway checks
-- `external_service`: Portkey AI gateway, OpenWebUI database, and pipeline database checks
+```bash
+live and (smoke or integration or health or external_service)
+```
 
-The OpenShift backend quality runner is strict. Missing required deployed-environment config fails the quality signal instead of being treated as an acceptable skip.
+The backend OpenShift runner uses strict live mode:
 
-The build-triggered quality check is short-lived. It runs checks, forwards metrics, then exits. The Job runner remains available for explicit reruns after a rollout.
+```bash
+QUALITY_STRICT_LIVE_CHECKS=1
+```
 
-This automation is backend-only. Frontend live Playwright has its own `NAGA-open-webui` BuildConfig trigger.
+Missing required OpenShift config, Portkey credentials, database URLs, or service reachability fails the quality signal instead of becoming a quiet skip.
 
-### Frontend Post-Deployment Checks
+Backend OpenShift environment defaults:
+
+- `LIVE_API_BASE_URL=http://open-webui-mastering-homework.rit-genai-naga-dev.svc:8000`
+- `LIVE_FRONTEND_BASE_URL=http://open-webui.rit-genai-naga-dev.svc:80`
+- `PORTKEY_BASE_URL=https://ai-gateway.apps.cloud.rt.nyu.edu/v1`
+- `QUALITY_ENVIRONMENT=openshift-dev`
+- `QUALITY_REPOSITORY=AI_Tutor_Analysis`
+- `QUALITY_BRANCH=feature/test-suite-expansion`
+- `QUALITY_SOURCE=openshift-backend-build-triggered-checks`
+- `QUALITY_PUSHGATEWAY_URL=http://ai-tutor-quality-pushgateway:9091`
+
+Backend OpenShift secret:
+
+- Secret name: `open-webui-mastering-homework-secret`
+- Required keys: `portkey-api-key`, `pipeline-database-url`, `database-url`
+- BuildConfig mount path: `/var/run/ai-tutor-quality-secrets`
+
+Do not put these values in `dockerStrategy.env`. OpenShift Docker strategy env can be rendered into Docker build instructions, logs, or layers. The BuildConfig uses a read-only secret volume instead.
+
+Backend resource profile:
+
+- quality image build request: `250m CPU`, `512Mi memory`
+- quality image build limit: `1 CPU`, `1Gi memory`
+- explicit Job request: `100m CPU`, `256Mi memory`
+- explicit Job limit: `500m CPU`, `512Mi memory`
+
+## Frontend OpenShift Quality Checks
 
 Files in `NAGA-open-webui`:
 
 - `k8s/quality-checks/buildconfig.yaml`
 - `k8s/quality-checks/job.yaml`
 - `k8s/quality-checks/README.md`
+- `scripts/run_openshift_frontend_quality_checks_from_build.sh`
+- `scripts/run_openshift_frontend_quality_checks.sh`
+- `playwright/README.md`
 
-OpenShift objects:
+Objects:
 
 - ImageStream signal: `open-webui:latest`
-- BuildConfig/ImageStream image: `ai-tutor-frontend-quality-checks`
-- post-deployment Job: `ai-tutor-frontend-post-deploy-quality-check`
+- ImageStream: `ai-tutor-frontend-quality-checks`
+- BuildConfig: `ai-tutor-frontend-quality-checks`
+- optional explicit rerun Job: `ai-tutor-frontend-post-deploy-quality-check`
 
-What it checks today:
+The existing frontend deployment flow is preserved:
 
-- live Playwright AI Tutor workflows against the deployed OpenShift frontend
+- the frontend app BuildConfig can still push to `registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest`
+- the Helm-managed `StatefulSet/open-webui` can still pull that external image
+- `open-webui:latest` in OpenShift tracks the external image as an automation signal only
 
-Automation status:
+Automatic trigger:
 
-- `ai-tutor-frontend-quality-checks` has an `ImageChange` trigger on the frontend app `open-webui:latest` ImageStreamTag
-- `open-webui:latest` tracks the existing external image `registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest`
-- when OpenShift imports a new external image digest into that ImageStream tag, it starts the frontend quality-check image build
-- the frontend quality-check build runs `scripts/run_openshift_frontend_quality_checks_from_build.sh` as its `postCommit` hook
-- the hook reads live Playwright credentials from `ai-tutor-playwright-live-secret` through a read-only BuildConfig volume
-- the hook uses the tracked `NAGA-open-webui/playwright/fixtures/Math_HW.pdf` fixture that is baked into the frontend quality-check image
-- OpenShift sets `PLAYWRIGHT_STRICT_LIVE_CHECKS=1`, so missing live prerequisites fail the quality signal instead of becoming quiet skips
-- the older Job runner remains available for explicit reruns after a rollout
+```text
+external frontend image digest is imported into open-webui:latest
+-> ai-tutor-frontend-quality-checks BuildConfig starts
+-> quality_checks/Dockerfile builds the Playwright quality image
+-> postCommit runs scripts/run_openshift_frontend_quality_checks_from_build.sh
+-> live Playwright runs against the deployed OpenShift frontend
+-> metrics are pushed to ai-tutor-quality-pushgateway
+```
 
-Important frontend deployment behavior:
+OpenShift scheduled image import is automatic, but it may not fire the exact second the external registry push completes. For an immediate test run after a manual frontend build, import the external image explicitly:
 
-- this preserves the current frontend app BuildConfig external registry output
-- this preserves the Helm-managed `open-webui` StatefulSet image reference
-- scheduled ImageStream import is automatic but may not fire the exact second the external registry push completes; explicit `oc import-image open-webui:latest` can be used when an immediate run is required after a manual build
+```bash
+oc import-image open-webui:latest \
+  --from=registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest \
+  --reference-policy=source \
+  --confirm \
+  -n rit-genai-naga-dev
+```
 
-What it does not run:
+Frontend OpenShift environment defaults:
 
-- Vitest unit/component checks
-- mocked Playwright checks
+- `PLAYWRIGHT_RUN_LIVE=1`
+- `PLAYWRIGHT_STRICT_LIVE_CHECKS=1`
+- `PLAYWRIGHT_SKIP_WEB_SERVER=1`
+- `PLAYWRIGHT_BASE_URL=http://open-webui.rit-genai-naga-dev.svc:80`
+- `PLAYWRIGHT_WORKERS=1`
+- `PLAYWRIGHT_RETRIES=0`
+- `PLAYWRIGHT_VIDEO=off`
+- `PLAYWRIGHT_HOMEWORK_PDF_PATH=/workspace/playwright/fixtures/Math_HW.pdf`
+- `QUALITY_ENVIRONMENT=openshift-dev`
+- `QUALITY_REPOSITORY=NAGA-open-webui`
+- `QUALITY_BRANCH=rs/ai-tutor-tests`
+- `QUALITY_SOURCE=openshift-frontend-build-triggered-playwright`
+- `QUALITY_PUSHGATEWAY_URL=http://ai-tutor-quality-pushgateway:9091`
 
-Reason:
+Frontend OpenShift secret:
 
-- those tests already run in GitHub Actions and should not be repeated in OpenShift
+- Secret name: `ai-tutor-playwright-live-secret`
+- Required keys: `admin-email`, `admin-password`, `student-email`, `student-password`
+- BuildConfig mount path: `/var/run/ai-tutor-playwright-live-secret`
 
-## Post-Deploy Testing Direction
+The homework upload fixture is not stored in a secret. It is tracked in Git:
 
-Run the OpenShift checks only after a new dev build/rollout, or when explicitly validating the deployed environment:
+- repo path: `NAGA-open-webui/playwright/fixtures/Math_HW.pdf`
+- OpenShift image path: `/workspace/playwright/fixtures/Math_HW.pdf`
+
+To change the OpenShift test PDF, replace that repo file with the same filename, commit, push, and rebuild the frontend quality image.
+
+Frontend resource profile:
+
+- quality image build request: `500m CPU`, `1Gi memory`
+- quality image build limit: `2 CPU`, `4Gi memory`
+- explicit Job request: `1 CPU`, `2Gi memory`
+- explicit Job limit: `2 CPU`, `4Gi memory`
+- Playwright workers: `1`
+- video: `off`
+
+## Metrics and Dashboards
+
+Metrics are test telemetry only. They include:
+
+- pass/fail/error counts
+- check duration
+- repository, branch, source, environment, run id, and commit labels
+- service/check status labels
+
+They must not include:
+
+- secrets
+- database rows
+- student submissions
+- API response bodies
+- uploaded PDF contents
+- user credentials
+
+Grafana Cloud GitHub repository secrets:
+
+- `GRAFANA_CLOUD_PROMETHEUS_URL`
+- `GRAFANA_CLOUD_PROMETHEUS_USER`
+- `GRAFANA_CLOUD_PROMETHEUS_PASSWORD`
+
+OpenShift Pushgateway grouping:
+
+- job: `ai-tutor-quality`
+- group labels: `environment`, `repository`
+
+Dashboard JSON:
+
+- backend overview: `AI_Tutor_Analysis/observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
+- frontend overview: `NAGA-open-webui/observability/grafana/dashboards/ai-tutor-frontend-github-quality.json`
+
+Dashboard expectations:
+
+- GitHub and OpenShift sources are shown separately
+- backend and frontend repos are shown separately
+- stat panels use latest-run style queries so repeated runs do not stack pass counts in the selected time window
+- OpenShift panels identify deployed-environment failures separately from CI failures
+
+## Operational Commands
+
+Backend setup:
 
 ```bash
 cd AI_Tutor_Analysis
-bash scripts/run_backend_build_deploy_quality_check.sh
-
-cd ../NAGA-open-webui
-bash scripts/run_frontend_build_deploy_quality_check.sh
+oc apply -f k8s/quality-checks/buildconfig.yaml -n rit-genai-naga-dev
 ```
 
-Longer term, this should be handled by OpenShift Pipelines/Tekton or ArgoCD post-sync hooks instead of personal tokens or manual terminal commands.
+Backend manual quality rerun:
 
-## Current Limitations
+```bash
+oc start-build ai-tutor-quality-checks --follow --wait -n rit-genai-naga-dev
+```
 
-- OpenShift live Playwright requires real dev test accounts and the tracked `NAGA-open-webui/playwright/fixtures/Math_HW.pdf` fixture.
+Frontend setup:
+
+```bash
+cd NAGA-open-webui
+oc apply -f k8s/quality-checks/buildconfig.yaml -n rit-genai-naga-dev
+```
+
+Frontend immediate external-image import and quality trigger:
+
+```bash
+oc import-image open-webui:latest \
+  --from=registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest \
+  --reference-policy=source \
+  --confirm \
+  -n rit-genai-naga-dev
+```
+
+Frontend manual quality rerun:
+
+```bash
+oc start-build ai-tutor-frontend-quality-checks --follow --wait -n rit-genai-naga-dev
+```
+
+Check recent quality pods:
+
+```bash
+oc get pods -n rit-genai-naga-dev | grep quality
+```
+
+## Resource and Waste Controls
+
+The implementation is intentionally event-driven and short-lived:
+
+- no always-running test pods
+- no CronJobs for these quality checks
+- limited build history with `successfulBuildsHistoryLimit: 2` and `failedBuildsHistoryLimit: 2`
+- completed explicit Jobs use `ttlSecondsAfterFinished: 3600`
+- Playwright runs one Chromium worker with video disabled in OpenShift
+- OpenShift runs only deployed-environment validation, not duplicate CI suites
+
+Before requesting more resources, use real OpenShift runs to inspect actual build/job usage. Increase CPU or memory only if observed runs show consistent throttling, out-of-memory kills, or unacceptable runtime.
+
+## Current Limitations and Next Improvements
+
+- BuildConfig image-change triggers start checks automatically after image updates, but they are not a full rollout gate.
+- The frontend trigger depends on OpenShift importing the external registry digest into the `open-webui:latest` ImageStreamTag.
+- For strict "build, rollout, then test immediately" orchestration, use OpenShift Pipelines/Tekton or ArgoCD post-sync hooks with team-approved service-account RBAC.
 - GitHub Actions should not access VPN-only OpenShift dev services unless a secure service-account-based path is approved.
-- Grafana Cloud is external SaaS; if that is not acceptable, move metrics to OpenShift user-workload monitoring or an in-cluster Grafana/Prometheus setup.
-- The local Grafana stack is for demos and development, not production operation.
-
-## Resource Guidance
-
-Current backend post-deployment checks:
-
-- request: `100m CPU`, `256Mi memory`
-- limit: `500m CPU`, `512Mi memory`
-- marker expression: `live and (smoke or integration or health or external_service)`
-
-Current frontend live Playwright post-deployment checks:
-
-- request: `1 CPU`, `2Gi memory`
-- limit: `2 CPU`, `4Gi memory`
-- workers: `1`
-- video: `off`
-
-Internal Grafana OSS demo/team dashboard:
-
-- small demo request: `250m CPU`, `512Mi memory`
-- small demo limit: `1 CPU`, `1Gi memory`
-- shared dev request: `500m CPU`, `1Gi memory`
-- shared dev limit: `1 CPU`, `2Gi memory`
-- storage: `5Gi` to `10Gi`
+- Grafana Cloud is external SaaS; if that is not acceptable, move metrics fully into OpenShift user-workload monitoring or an in-cluster Grafana/Prometheus setup.
