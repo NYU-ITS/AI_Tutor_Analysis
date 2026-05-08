@@ -20,7 +20,7 @@ COPY student_analysis_pipeline ./student_analysis_pipeline
 COPY tests ./tests
 COPY pytest.ini ./pytest.ini
 COPY scripts/serve_test_metrics.py scripts/write_grafana_cloud_prometheus_config.py scripts/run_openshift_quality_checks.sh scripts/run_openshift_quality_checks_from_build.sh scripts/provision_grafana_quality_assets.py scripts/sync_github_quality_metrics.py scripts/quality_artifact_store.py ./scripts/
-COPY k8s/observability/50-grafana-dashboard.yaml k8s/observability/51-github-dashboard.yaml k8s/observability/52-local-dashboard.yaml ./k8s/observability/
+COPY k8s/observability/50-grafana-dashboard.yaml k8s/observability/51-github-dashboard.yaml ./k8s/observability/
 
 RUN chmod +x ./scripts/run_openshift_quality_checks.sh ./scripts/run_openshift_quality_checks_from_build.sh ./scripts/write_grafana_cloud_prometheus_config.py ./scripts/provision_grafana_quality_assets.py ./scripts/sync_github_quality_metrics.py ./scripts/quality_artifact_store.py \
     && chgrp -R 0 /workspace \

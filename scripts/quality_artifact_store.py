@@ -139,6 +139,24 @@ def upload_latest_marker(prefix: str, metadata: dict[str, str]) -> None:
     s3_request("PUT", f"{prefix}/latest.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
 
 
+def read_json_or_default(key: str, default: object) -> object:
+    try:
+        return json.loads(s3_request("GET", key).decode("utf-8"))
+    except Exception:
+        return default
+
+
+def update_index(prefix: str, metadata: dict[str, object], limit: int = 20) -> None:
+    index_key = f"{prefix}/index.json"
+    index = read_json_or_default(index_key, [])
+    if not isinstance(index, list):
+        index = []
+    run_id = str(metadata.get("run_id", ""))
+    index = [item for item in index if item.get("run_id") != run_id]
+    index.insert(0, metadata)
+    s3_request("PUT", index_key, json.dumps(index[:limit], indent=2).encode("utf-8"), content_type="application/json")
+
+
 def sync_github_playwright(args: argparse.Namespace) -> None:
     token = required_env("GITHUB_TOKEN")
     owner = env("GITHUB_OWNER", "NYU-ITS")
@@ -164,17 +182,20 @@ def sync_github_playwright(args: argparse.Namespace) -> None:
                 content_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
                 s3_request("PUT", f"{target_prefix}/{safe_name}", payload, content_type=content_type)
                 synced += 1
-        upload_latest_marker(
-            prefix,
-            {
+        if artifact_name == "playwright-report":
+            metadata = {
                 "repository": repo,
+                "environment": "github-actions",
                 "branch": branch,
                 "run_id": run_id,
+                "commit_sha": "",
                 "created_at": artifact.get("created_at", ""),
+                "status": "synced",
                 "report_path": f"/artifact/{target_prefix}/index.html",
                 "synced_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            },
-        )
+            }
+            upload_latest_marker(prefix, metadata)
+            update_index(prefix, metadata)
         print(f"Synced {artifact_name} from run {run_id}.")
 
     if synced == 0:
@@ -182,23 +203,76 @@ def sync_github_playwright(args: argparse.Namespace) -> None:
     print(f"Synced {synced} Playwright artifact file(s).")
 
 
+def artifact_prefixes() -> list[tuple[str, str]]:
+    raw = env("ARTIFACT_PREFIXES")
+    if raw:
+        pairs = []
+        for item in raw.split(","):
+            label, _, prefix = item.partition("=")
+            if label and prefix:
+                pairs.append((label.strip(), prefix.strip().strip("/")))
+        if pairs:
+            return pairs
+    prefix = env("ARTIFACT_PREFIX", "openshift/frontend/dev")
+    return [("OpenShift frontend", prefix)]
+
+
+def metadata_table_rows(prefix: str, items: list[dict[str, object]]) -> str:
+    rows = []
+    for item in items:
+        report_path = str(item.get("report_path") or "#")
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(item.get('created_at', '')))}</td>"
+            f"<td>{html.escape(str(item.get('run_id', '')))}</td>"
+            f"<td>{html.escape(str(item.get('environment', '')))}</td>"
+            f"<td>{html.escape(str(item.get('branch', '')))}</td>"
+            f"<td>{html.escape(str(item.get('status', '')))}</td>"
+            f"<td>{html.escape(str(item.get('passed', '')))}</td>"
+            f"<td>{html.escape(str(item.get('failed', '')))}</td>"
+            f"<td>{html.escape(str(item.get('skipped', '')))}</td>"
+            f"<td><a href=\"{html.escape(report_path)}\">Open report</a></td>"
+            f"<td><a href=\"/artifact/{html.escape(prefix)}/runs/{html.escape(str(item.get('run_id', '')))}/metadata.json\">metadata</a></td>"
+            "</tr>"
+        )
+    return "".join(rows) or "<tr><td colspan='10'>No runs found yet.</td></tr>"
+
+
 def serve(args: argparse.Namespace) -> None:
-    prefix = env("ARTIFACT_PREFIX", "github/NAGA-open-webui/playwright")
+    prefixes = artifact_prefixes()
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
             try:
-                if self.path in {"/", "/latest"}:
-                    latest = json.loads(s3_request("GET", f"{prefix}/latest.json").decode("utf-8"))
+                if self.path in {"/", "/latest", "/runs"}:
+                    sections = []
+                    for label, prefix in prefixes:
+                        latest = read_json_or_default(f"{prefix}/latest.json", {})
+                        index = read_json_or_default(f"{prefix}/index.json", [])
+                        if not isinstance(index, list):
+                            index = []
+                        latest_link = str(latest.get("report_path") or "#") if isinstance(latest, dict) else "#"
+                        sections.append(
+                            f"<section><h2>{html.escape(label)}</h2>"
+                            f"<p><a href=\"{html.escape(latest_link)}\">Open latest report</a></p>"
+                            "<table><thead><tr><th>Created</th><th>Run</th><th>Environment</th><th>Branch</th><th>Status</th>"
+                            "<th>Passed</th><th>Failed</th><th>Skipped</th><th>Report</th><th>Raw</th></tr></thead>"
+                            f"<tbody>{metadata_table_rows(prefix, index)}</tbody></table></section>"
+                        )
                     body = f"""<!doctype html>
-<html><head><title>AI Tutor Playwright Report</title></head>
+<html><head><title>AI Tutor Quality Artifacts</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 32px; color: #111827; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 16px 0 32px; }}
+  th, td {{ border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }}
+  th {{ background: #f9fafb; }}
+  a {{ color: #2563eb; text-decoration: none; }}
+  section {{ margin-bottom: 28px; }}
+</style></head>
 <body>
-  <h1>AI Tutor Playwright Report</h1>
-  <p>Repository: {html.escape(latest.get("repository", ""))}</p>
-  <p>Branch: {html.escape(latest.get("branch", ""))}</p>
-  <p>Run: {html.escape(latest.get("run_id", ""))}</p>
-  <p>Synced: {html.escape(latest.get("synced_at", ""))}</p>
-  <p><a href="{html.escape(latest.get("report_path", "#"))}">Open latest HTML report</a></p>
+  <h1>AI Tutor Quality Artifacts</h1>
+  <p>Recent heavy test artifacts from OpenShift and GitHub. Numeric trends stay in Prometheus/Grafana.</p>
+  {''.join(sections)}
 </body></html>""".encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")

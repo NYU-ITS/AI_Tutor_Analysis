@@ -316,6 +316,8 @@ Dashboard JSON:
 
 - backend overview: `AI_Tutor_Analysis/observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
 - frontend overview: `NAGA-open-webui/observability/grafana/dashboards/ai-tutor-frontend-github-quality.json`
+- deployed OpenShift dashboard: `AI_Tutor_Analysis/k8s/observability/50-grafana-dashboard.yaml`
+- deployed GitHub dashboard: `AI_Tutor_Analysis/k8s/observability/51-github-dashboard.yaml`
 
 Dashboard expectations:
 
@@ -323,6 +325,16 @@ Dashboard expectations:
 - backend and frontend repos are shown separately
 - stat panels use latest-run style queries so repeated runs do not stack pass counts in the selected time window
 - OpenShift panels identify deployed-environment failures separately from CI failures
+- the local dashboard is kept for local Docker/Grafana only and is not imported into shared OpenShift Grafana
+
+Heavy artifacts are stored in ObjectBucket/S3 instead of Prometheus:
+
+- OpenShift frontend artifacts: `openshift/frontend/dev/runs/<run-id>/`
+- OpenShift frontend latest marker: `openshift/frontend/dev/latest.json`
+- OpenShift frontend recent run index: `openshift/frontend/dev/index.json`
+- GitHub frontend artifacts: `github/frontend/<branch>/runs/<run-id>/`
+
+The deployed artifact viewer exposes the latest report plus recent runs. Prometheus keeps numeric history for 30 days; ObjectBucket/S3 is the first-version artifact history layer.
 
 ## Operational Commands
 

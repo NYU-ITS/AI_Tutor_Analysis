@@ -40,7 +40,7 @@ spec:
             - name: GITHUB_BRANCH_FILTER
               value: rs/ai-tutor-tests
             - name: ARTIFACT_PREFIX
-              value: github/NAGA-open-webui/playwright
+              value: github/frontend/rs-ai-tutor-tests
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:

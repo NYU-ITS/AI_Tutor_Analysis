@@ -103,7 +103,6 @@ def main() -> None:
         default=[
             "k8s/observability/50-grafana-dashboard.yaml",
             "k8s/observability/51-github-dashboard.yaml",
-            "k8s/observability/52-local-dashboard.yaml",
         ],
     )
     args = parser.parse_args()

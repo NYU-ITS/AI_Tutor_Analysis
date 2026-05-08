@@ -41,8 +41,8 @@ spec:
             - configMapRef:
                 name: ai-tutor-test-artifacts-bucket
           env:
-            - name: ARTIFACT_PREFIX
-              value: github/NAGA-open-webui/playwright
+            - name: ARTIFACT_PREFIXES
+              value: OpenShift frontend=openshift/frontend/dev,GitHub frontend=github/frontend/rs-ai-tutor-tests
           resources:
             requests:
               cpu: 50m
