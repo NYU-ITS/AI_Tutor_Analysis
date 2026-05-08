@@ -43,6 +43,8 @@ spec:
           env:
             - name: ARTIFACT_PREFIXES
               value: OpenShift frontend=openshift/frontend/dev,GitHub frontend=github/frontend/rs-ai-tutor-tests
+            - name: BUCKET_TLS_VERIFY
+              value: "false"
           resources:
             requests:
               cpu: 50m

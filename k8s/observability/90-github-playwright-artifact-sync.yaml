@@ -41,6 +41,8 @@ spec:
               value: rs/ai-tutor-tests
             - name: ARTIFACT_PREFIX
               value: github/frontend/rs-ai-tutor-tests
+            - name: BUCKET_TLS_VERIFY
+              value: "false"
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:

@@ -199,3 +199,5 @@ The viewer shows the latest report plus recent runs from configured artifact pre
 - `github/frontend/rs-ai-tutor-tests`
 
 If no artifact has been synced yet for a prefix, that table shows no runs until the first upload succeeds.
+
+The ObjectBucket endpoint is internal to OpenShift and uses a self-signed certificate chain, so artifact uploader/viewer pods set `BUCKET_TLS_VERIFY=false`. This is scoped only to the in-cluster bucket client path.

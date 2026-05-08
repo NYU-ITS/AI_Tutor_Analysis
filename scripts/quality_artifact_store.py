@@ -10,6 +10,7 @@ import html
 import json
 import mimetypes
 import os
+import ssl
 import sys
 import time
 import urllib.error
@@ -45,6 +46,12 @@ def s3_base_url() -> str:
     port = env("BUCKET_PORT")
     authority = f"{host}:{port}" if port and port not in {"80", "443"} else host
     return f"{scheme}://{authority}/{required_env('BUCKET_NAME')}"
+
+
+def urlopen(request: urllib.request.Request, timeout: int = 60):
+    if urllib.parse.urlparse(request.full_url).scheme == "https" and env("BUCKET_TLS_VERIFY", "true").lower() in {"0", "false", "no"}:
+        return urllib.request.urlopen(request, timeout=timeout, context=ssl._create_unverified_context())
+    return urllib.request.urlopen(request, timeout=timeout)
 
 
 def signing_key(secret_key: str, date_stamp: str, region: str) -> bytes:
@@ -91,7 +98,7 @@ def s3_request(method: str, key: str, body: bytes = b"", query: str = "", conten
         "Content-Type": content_type,
     }
     request = urllib.request.Request(url, data=body if method in {"PUT", "POST"} else None, method=method, headers=headers)
-    with urllib.request.urlopen(request, timeout=60) as response:
+    with urlopen(request, timeout=60) as response:
         return response.read()
 
 
