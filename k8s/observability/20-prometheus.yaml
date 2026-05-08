@@ -45,6 +45,8 @@ metadata:
     app.kubernetes.io/part-of: ai-tutor-observability
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: ai-tutor-quality-prometheus
