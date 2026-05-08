@@ -42,7 +42,7 @@ spec:
                 name: ai-tutor-test-artifacts-bucket
           env:
             - name: ARTIFACT_PREFIXES
-              value: OpenShift frontend=openshift/frontend/dev,GitHub frontend=github/frontend/rs-ai-tutor-tests
+              value: OpenShift backend=openshift/backend/dev,OpenShift frontend=openshift/frontend/dev,GitHub backend=github/backend/feature-test-suite-expansion,GitHub frontend=github/frontend/rs-ai-tutor-tests
             - name: BUCKET_TLS_VERIFY
               value: "false"
           resources:

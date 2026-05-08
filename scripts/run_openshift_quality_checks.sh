@@ -14,6 +14,7 @@ export QUALITY_PROMETHEUS_CONFIG_PATH="${QUALITY_PROMETHEUS_CONFIG_PATH:-/tmp/ai
 export QUALITY_PUSHGATEWAY_URL="${QUALITY_PUSHGATEWAY_URL:-}"
 export QUALITY_STRICT_LIVE_CHECKS="${QUALITY_STRICT_LIVE_CHECKS:-1}"
 export QUALITY_OPENSHIFT_MARKER_EXPR="${QUALITY_OPENSHIFT_MARKER_EXPR:-live and (smoke or integration or health or external_service)}"
+export QUALITY_UPLOAD_BACKEND_ARTIFACTS="${QUALITY_UPLOAD_BACKEND_ARTIFACTS:-1}"
 
 urlencode() {
   python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
@@ -54,12 +55,30 @@ forward_metrics_to_grafana_cloud() {
   wait "${prometheus_pid}" >/dev/null 2>&1 || true
 }
 
+upload_backend_artifacts() {
+  if [[ "${QUALITY_UPLOAD_BACKEND_ARTIFACTS}" != "1" ]]; then
+    echo "Backend artifact upload is disabled."
+    return 0
+  fi
+
+  python scripts/quality_artifact_store.py upload-openshift-backend \
+    --prefix "${ARTIFACT_PREFIX:-openshift/backend/dev}" \
+    --results live-results/results.xml \
+    --log live-results/pytest.log || {
+      echo "Skipping backend artifact upload after a non-fatal upload error." >&2
+      return 0
+    }
+}
+
 pytest_status=0
+set +e
 PYTHONPATH=student_analysis_pipeline python -m pytest \
   --noconftest \
   tests/live \
   -m "${QUALITY_OPENSHIFT_MARKER_EXPR}" \
-  --junitxml=live-results/results.xml || pytest_status=$?
+  --junitxml=live-results/results.xml 2>&1 | tee live-results/pytest.log
+pytest_status=${PIPESTATUS[0]}
+set -e
 
 python scripts/serve_test_metrics.py \
   --results /tmp/non-live-results.xml \
@@ -81,5 +100,6 @@ curl -fsS "http://${QUALITY_METRICS_TARGET}/metrics" >/dev/null
 
 push_metrics_to_gateway
 forward_metrics_to_grafana_cloud
+upload_backend_artifacts
 
 exit "${pytest_status}"

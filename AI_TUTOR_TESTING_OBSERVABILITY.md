@@ -184,6 +184,8 @@ Backend OpenShift environment defaults:
 - `QUALITY_BRANCH=feature/test-suite-expansion`
 - `QUALITY_SOURCE=openshift-backend-build-triggered-checks`
 - `QUALITY_PUSHGATEWAY_URL=http://ai-tutor-quality-pushgateway:9091`
+- `ARTIFACT_PREFIX=openshift/backend/dev`
+- `QUALITY_UPLOAD_BACKEND_ARTIFACTS=1`
 
 Backend OpenShift secret:
 
@@ -199,6 +201,16 @@ Backend resource profile:
 - quality image build limit: `1 CPU`, `1Gi memory`
 - explicit Job request: `100m CPU`, `256Mi memory`
 - explicit Job limit: `500m CPU`, `512Mi memory`
+
+Backend OpenShift artifact outputs:
+
+- `openshift/backend/dev/runs/<run-id>/junit/results.xml`
+- `openshift/backend/dev/runs/<run-id>/raw/live-results.xml`
+- `openshift/backend/dev/runs/<run-id>/logs/backend-quality-redacted.log`
+- `openshift/backend/dev/latest.json`
+- `openshift/backend/dev/index.json`
+
+The backend log artifact is sanitized before upload. The uploader replaces known secret environment values and common bearer token, API key, password, and database URL patterns with redaction markers. Artifact upload is best-effort and cannot turn a passing pytest run into a failed test run, but it logs the skip reason.
 
 ## Frontend OpenShift Quality Checks
 
@@ -329,12 +341,16 @@ Dashboard expectations:
 
 Heavy artifacts are stored in ObjectBucket/S3 instead of Prometheus:
 
+- OpenShift backend artifacts: `openshift/backend/dev/runs/<run-id>/`
+- OpenShift backend latest marker: `openshift/backend/dev/latest.json`
+- OpenShift backend recent run index: `openshift/backend/dev/index.json`
 - OpenShift frontend artifacts: `openshift/frontend/dev/runs/<run-id>/`
 - OpenShift frontend latest marker: `openshift/frontend/dev/latest.json`
 - OpenShift frontend recent run index: `openshift/frontend/dev/index.json`
+- GitHub backend artifacts: `github/backend/<branch>/runs/<run-id>/`
 - GitHub frontend artifacts: `github/frontend/<branch>/runs/<run-id>/`
 
-The deployed artifact viewer exposes the latest report plus recent runs. Prometheus keeps numeric history for 30 days; ObjectBucket/S3 is the first-version artifact history layer.
+The deployed artifact viewer exposes the latest report plus recent runs. Prometheus keeps numeric history for 30 days via `--storage.tsdb.retention.time=30d`; ObjectBucket/S3 keeps heavy artifact history for 30 days via the bucket lifecycle policy.
 
 ## Operational Commands
 
@@ -343,6 +359,25 @@ Backend setup:
 ```bash
 cd AI_Tutor_Analysis
 oc apply -f k8s/quality-checks/buildconfig.yaml -n rit-genai-naga-dev
+```
+
+ObjectBucket lifecycle enforcement:
+
+```bash
+cd AI_Tutor_Analysis
+oc apply -f k8s/observability/00-artifact-bucket.yaml -n rit-genai-naga-dev
+oc delete job ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/observability/01-artifact-bucket-lifecycle-job.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev -f
+```
+
+GitHub backend artifact sync:
+
+```bash
+cd AI_Tutor_Analysis
+oc delete job ai-tutor-github-backend-artifact-sync -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/observability/91-github-backend-artifact-sync.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-github-backend-artifact-sync -n rit-genai-naga-dev -f
 ```
 
 Backend manual quality rerun:

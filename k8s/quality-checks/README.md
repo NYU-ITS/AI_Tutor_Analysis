@@ -224,6 +224,27 @@ Build history is capped:
 
 This keeps resource use low and avoids a pile-up of old quality-check artifacts.
 
+## Backend Artifact Upload
+
+OpenShift backend runs upload deployment-level artifacts to ObjectBucket/S3 after metrics are pushed:
+
+- prefix: `openshift/backend/dev/runs/<run-id>/`
+- JUnit XML: `junit/results.xml`
+- raw live-results XML: `raw/live-results.xml`
+- redacted pytest log: `logs/backend-quality-redacted.log`
+- latest marker: `openshift/backend/dev/latest.json`
+- recent run index: `openshift/backend/dev/index.json`
+
+Artifact upload is best-effort. A bucket or credential problem is logged and skipped, while the quality result still comes from the pytest exit status and pushed metrics.
+
+The log uploader redacts known secret environment values and common bearer token, API key, password, and database URL patterns before any log content is written to the bucket. Do not add request payloads, student content, uploaded homework contents, tokens, or raw database rows to test logs.
+
+Required artifact bucket wiring:
+
+- BuildConfig mounts `ai-tutor-test-artifacts-bucket` at `/var/run/ai-tutor-artifacts-secret` and sets non-secret bucket host/name/port values.
+- Explicit Job uses `envFrom` for the ObjectBucketClaim Secret and ConfigMap.
+- In-cluster bucket clients set `BUCKET_TLS_VERIFY=false` because the internal bucket endpoint uses the OpenShift self-signed service chain.
+
 ## Troubleshooting
 
 Check recent builds:

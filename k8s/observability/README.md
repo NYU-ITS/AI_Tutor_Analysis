@@ -101,15 +101,16 @@ The first version uses the Grafana Operator default admin secret. Before wider t
 
 Initial dev retention:
 
-- Prometheus metrics: `30d`
+- Prometheus metrics: `30d`, enforced by `--storage.tsdb.retention.time=30d` in `20-prometheus.yaml`
 - PostgreSQL detailed test history: planned next, target `90d`
-- S3 artifacts: target `30d`
+- S3 artifacts: `30d`, enforced by the S3 lifecycle policy in `01-artifact-bucket-lifecycle-job.yaml`
 
 This folder implements the Prometheus/Grafana/bucket foundation first. PostgreSQL result tables are intentionally deferred until searchable per-test history is needed.
 
 ## Current Data Sources
 
 - OpenShift post-deployment Jobs can publish directly to `ai-tutor-quality-pushgateway`.
+- OpenShift backend checks can upload JUnit XML, raw live-results XML, and redacted pytest logs to ObjectBucket/S3 under `openshift/backend/dev/runs/<run-id>/`.
 - OpenShift frontend Playwright checks can upload reports, screenshots, videos, traces, and raw result files to ObjectBucket/S3 under `openshift/frontend/dev/runs/<run-id>/`.
 - Local runs can publish to Pushgateway when port-forwarded or run inside the cluster.
 - GitHub Actions uploads Prometheus metrics as workflow artifacts. `ai-tutor-github-quality-metrics-sync` can run inside OpenShift after the GitHub token is approved, pull the latest GitHub artifacts, and publish them to the internal Pushgateway.
@@ -171,17 +172,42 @@ oc logs job/ai-tutor-frontend-post-deploy-quality-check -n rit-genai-naga-dev -f
 
 ## Artifact Direction
 
-The ObjectBucketClaim stores Playwright HTML reports and videos in OpenShift-owned object storage.
+The ObjectBucketClaim stores heavy quality artifacts in OpenShift-owned object storage: backend JUnit/live XML and redacted logs, frontend Playwright reports, screenshots, videos, traces, and synced GitHub artifacts where available.
 
-The first artifact path syncs GitHub Playwright artifacts into the bucket. The viewer can be applied any time:
+Apply the bucket and the retention policy:
+
+```bash
+oc apply -f k8s/observability/00-artifact-bucket.yaml -n rit-genai-naga-dev
+oc delete job ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/observability/01-artifact-bucket-lifecycle-job.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev -f
+```
+
+The lifecycle Job applies an S3 bucket lifecycle rule that expires all quality artifacts after `30` days and aborts incomplete multipart uploads after one day.
+
+The viewer can be applied any time:
 
 ```bash
 oc apply -f k8s/observability/80-artifact-viewer.yaml -n rit-genai-naga-dev
 ```
 
-After token approval, run the artifact sync Job manually from the deploy/release flow:
+OpenShift backend artifact upload is automatic in the backend quality runner. It writes:
+
+- `openshift/backend/dev/runs/<run-id>/junit/results.xml`
+- `openshift/backend/dev/runs/<run-id>/raw/live-results.xml`
+- `openshift/backend/dev/runs/<run-id>/logs/backend-quality-redacted.log`
+- `openshift/backend/dev/latest.json`
+- `openshift/backend/dev/index.json`
+
+The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to the bucket. Upload failures are best-effort and do not override the pytest exit status.
+
+After token approval, run the GitHub artifact sync Jobs manually from the deploy/release flow:
 
 ```bash
+oc delete job ai-tutor-github-backend-artifact-sync -n rit-genai-naga-dev --ignore-not-found
+oc apply -f k8s/observability/91-github-backend-artifact-sync.yaml -n rit-genai-naga-dev
+oc logs job/ai-tutor-github-backend-artifact-sync -n rit-genai-naga-dev -f
+
 oc delete job ai-tutor-github-playwright-artifact-sync -n rit-genai-naga-dev --ignore-not-found
 oc apply -f k8s/observability/90-github-playwright-artifact-sync.yaml -n rit-genai-naga-dev
 oc logs job/ai-tutor-github-playwright-artifact-sync -n rit-genai-naga-dev -f
@@ -196,7 +222,9 @@ oc get route ai-tutor-quality-artifacts -n rit-genai-naga-dev -o jsonpath='https
 The viewer shows the latest report plus recent runs from configured artifact prefixes:
 
 - `openshift/frontend/dev`
+- `openshift/backend/dev`
 - `github/frontend/rs-ai-tutor-tests`
+- `github/backend/feature-test-suite-expansion`
 
 If no artifact has been synced yet for a prefix, that table shows no runs until the first upload succeeds.
 
