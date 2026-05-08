@@ -217,6 +217,7 @@ Files in `NAGA-open-webui`:
 
 OpenShift objects:
 
+- ImageStream signal: `open-webui:latest`
 - BuildConfig/ImageStream image: `ai-tutor-frontend-quality-checks`
 - post-deployment Job: `ai-tutor-frontend-post-deploy-quality-check`
 
@@ -227,15 +228,17 @@ What it checks today:
 Automation status:
 
 - `ai-tutor-frontend-quality-checks` has an `ImageChange` trigger on the frontend app `open-webui:latest` ImageStreamTag
-- when the frontend app build updates that image stream tag, OpenShift starts the frontend quality-check image build
+- `open-webui:latest` tracks the existing external image `registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest`
+- when OpenShift imports a new external image digest into that ImageStream tag, it starts the frontend quality-check image build
 - the frontend quality-check build runs `scripts/run_openshift_frontend_quality_checks_from_build.sh` as its `postCommit` hook
 - the hook reads live Playwright credentials from `ai-tutor-playwright-live-secret` and the homework fixture from `ai-tutor-playwright-fixtures` through read-only BuildConfig volumes
 - the older Job runner remains available for explicit reruns after a rollout
 
-Important frontend deployment condition:
+Important frontend deployment behavior:
 
-- immediate automatic triggering requires the frontend app build to update `open-webui:latest`
-- if the app build only pushes the external Docker image `registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest`, OpenShift has no app ImageStream update to trigger from
+- this preserves the current frontend app BuildConfig external registry output
+- this preserves the Helm-managed `open-webui` StatefulSet image reference
+- scheduled ImageStream import is automatic but may not fire the exact second the external registry push completes; explicit `oc import-image open-webui:latest` can be used when an immediate run is required after a manual build
 
 What it does not run:
 
