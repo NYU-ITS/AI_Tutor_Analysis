@@ -178,8 +178,24 @@ def github_json(url: str, token: str) -> dict:
 
 def github_bytes(url: str, token: str) -> bytes:
     request = urllib.request.Request(url, headers=github_headers(token))
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
+    opener = urllib.request.build_opener(NoRedirectHandler)
+    try:
+        with opener.open(request, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code not in {301, 302, 303, 307, 308}:
+            raise
+        redirect_url = exc.headers.get("Location")
+        if not redirect_url:
+            raise
+        redirect_request = urllib.request.Request(redirect_url, headers={"User-Agent": "ai-tutor-artifact-sync"})
+        with urllib.request.urlopen(redirect_request, timeout=60) as response:
+            return response.read()
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        return None
 
 
 def newest_artifact(owner: str, repo: str, artifact_name: str, token: str, branch: str) -> dict | None:
