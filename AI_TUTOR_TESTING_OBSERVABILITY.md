@@ -273,6 +273,8 @@ Frontend OpenShift environment defaults:
 - `QUALITY_SOURCE=openshift-frontend-build-triggered-playwright`
 - `QUALITY_PUSHGATEWAY_URL=http://ai-tutor-quality-pushgateway:9091`
 
+The OpenShift frontend runner uses the Playwright projects from `NAGA-open-webui/playwright.config.ts` without a `--project` filter. The live workflow therefore runs on Chromium, Firefox, and WebKit. With the current three live workflows, each OpenShift frontend quality run executes nine browser checks while keeping `PLAYWRIGHT_WORKERS=1` for the first resource measurement.
+
 Frontend OpenShift secret:
 
 - Secret name: `ai-tutor-playwright-live-secret`
