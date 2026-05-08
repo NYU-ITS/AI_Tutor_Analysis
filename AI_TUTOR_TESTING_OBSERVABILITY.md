@@ -233,6 +233,7 @@ Automation status:
 - the frontend quality-check build runs `scripts/run_openshift_frontend_quality_checks_from_build.sh` as its `postCommit` hook
 - the hook reads live Playwright credentials from `ai-tutor-playwright-live-secret` through a read-only BuildConfig volume
 - the hook uses the tracked `NAGA-open-webui/playwright/fixtures/Math_HW.pdf` fixture that is baked into the frontend quality-check image
+- OpenShift sets `PLAYWRIGHT_STRICT_LIVE_CHECKS=1`, so missing live prerequisites fail the quality signal instead of becoming quiet skips
 - the older Job runner remains available for explicit reruns after a rollout
 
 Important frontend deployment behavior:
