@@ -205,6 +205,8 @@ The OpenShift backend quality runner is strict. Missing required deployed-enviro
 
 The build-triggered quality check is short-lived. It runs checks, forwards metrics, then exits. The Job runner remains available for explicit reruns after a rollout.
 
+This automation is backend-only. Frontend live Playwright has its own `NAGA-open-webui` BuildConfig trigger.
+
 ### Frontend Post-Deployment Checks
 
 Files in `NAGA-open-webui`:
@@ -221,6 +223,19 @@ OpenShift objects:
 What it checks today:
 
 - live Playwright AI Tutor workflows against the deployed OpenShift frontend
+
+Automation status:
+
+- `ai-tutor-frontend-quality-checks` has an `ImageChange` trigger on the frontend app `open-webui:latest` ImageStreamTag
+- when the frontend app build updates that image stream tag, OpenShift starts the frontend quality-check image build
+- the frontend quality-check build runs `scripts/run_openshift_frontend_quality_checks_from_build.sh` as its `postCommit` hook
+- the hook reads live Playwright credentials from `ai-tutor-playwright-live-secret` and the homework fixture from `ai-tutor-playwright-fixtures` through read-only BuildConfig volumes
+- the older Job runner remains available for explicit reruns after a rollout
+
+Important frontend deployment condition:
+
+- immediate automatic triggering requires the frontend app build to update `open-webui:latest`
+- if the app build only pushes the external Docker image `registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest`, OpenShift has no app ImageStream update to trigger from
 
 What it does not run:
 
