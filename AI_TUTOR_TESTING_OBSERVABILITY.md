@@ -231,7 +231,8 @@ Automation status:
 - `open-webui:latest` tracks the existing external image `registry.cloud.rt.nyu.edu/rit-genai-poc/naga-open-webui:latest`
 - when OpenShift imports a new external image digest into that ImageStream tag, it starts the frontend quality-check image build
 - the frontend quality-check build runs `scripts/run_openshift_frontend_quality_checks_from_build.sh` as its `postCommit` hook
-- the hook reads live Playwright credentials from `ai-tutor-playwright-live-secret` and the homework fixture from `ai-tutor-playwright-fixtures` through read-only BuildConfig volumes
+- the hook reads live Playwright credentials from `ai-tutor-playwright-live-secret` through a read-only BuildConfig volume
+- the hook uses the tracked `NAGA-open-webui/playwright/fixtures/Math_HW.pdf` fixture that is baked into the frontend quality-check image
 - the older Job runner remains available for explicit reruns after a rollout
 
 Important frontend deployment behavior:
@@ -265,7 +266,7 @@ Longer term, this should be handled by OpenShift Pipelines/Tekton or ArgoCD post
 
 ## Current Limitations
 
-- OpenShift live Playwright requires real dev test accounts and a small homework PDF fixture ConfigMap.
+- OpenShift live Playwright requires real dev test accounts and the tracked `NAGA-open-webui/playwright/fixtures/Math_HW.pdf` fixture.
 - GitHub Actions should not access VPN-only OpenShift dev services unless a secure service-account-based path is approved.
 - Grafana Cloud is external SaaS; if that is not acceptable, move metrics to OpenShift user-workload monitoring or an in-cluster Grafana/Prometheus setup.
 - The local Grafana stack is for demos and development, not production operation.
