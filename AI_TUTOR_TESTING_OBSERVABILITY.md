@@ -17,7 +17,7 @@ The frontend calls the backend analytics service, but the repositories are built
 
 - `backend` means checks for `AI_Tutor_Analysis`.
 - `frontend` means checks for `NAGA-open-webui`.
-- OpenShift checks are post-deployment checks. They are intentionally not scheduled because GitHub Actions already runs the code-level test suites.
+- OpenShift checks are deployed-environment checks. They are intentionally not scheduled because GitHub Actions already runs the code-level test suites.
 - We avoid using `live` in Job names where it can be confused with production traffic. When a check touches the deployed dev environment, the docs call that a deployed-environment check.
 
 ## Local Backend Checks
@@ -117,7 +117,7 @@ Grafana receives test metrics from:
 
 - GitHub backend workflow
 - GitHub frontend workflow
-- OpenShift backend post-deployment quality checks
+- OpenShift backend build-triggered deployed-environment quality checks
 - OpenShift frontend live Playwright post-deployment quality checks
 
 Required GitHub repository secrets:
@@ -154,7 +154,7 @@ Important dashboard behavior:
 
 - stat panels show the latest reported run per source
 - pass counts do not stack across repeated runs in the selected time window
-- failure panels separate GitHub checks from OpenShift post-deployment checks
+- failure panels separate GitHub checks from OpenShift deployed-environment checks
 
 ## Local Grafana Demo
 
@@ -173,7 +173,7 @@ Namespace:
 
 - `rit-genai-naga-dev`
 
-### Backend Post-Deployment Checks
+### Backend Build-Triggered Quality Checks
 
 Files:
 
@@ -186,6 +186,13 @@ OpenShift objects:
 - BuildConfig/ImageStream image: `ai-tutor-quality-checks`
 - post-deployment Job: `ai-tutor-backend-post-deploy-quality-check`
 
+Automatic trigger:
+
+- `ai-tutor-quality-checks` has an `ImageChange` trigger on `open-webui-mastering-homework:latest`
+- when the backend app build updates that image stream tag, OpenShift starts the quality-check image build
+- the quality-check build runs `scripts/run_openshift_quality_checks.sh` as its `postCommit` hook
+- metrics are pushed to the in-namespace Pushgateway
+
 What it checks:
 
 - `smoke`: deployed backend/frontend routes respond
@@ -195,7 +202,7 @@ What it checks:
 
 The OpenShift backend quality runner is strict. Missing required deployed-environment config fails the quality signal instead of being treated as an acceptable skip.
 
-The Job is short-lived. It runs checks, forwards metrics, then exits.
+The build-triggered quality check is short-lived. It runs checks, forwards metrics, then exits. The Job runner remains available for explicit reruns after a rollout.
 
 ### Frontend Post-Deployment Checks
 

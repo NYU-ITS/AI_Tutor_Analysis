@@ -22,10 +22,54 @@ spec:
     type: Docker
     dockerStrategy:
       dockerfilePath: quality_checks/Dockerfile
+      env:
+        - name: LIVE_API_BASE_URL
+          value: http://open-webui-mastering-homework.rit-genai-naga-dev.svc:8000
+        - name: LIVE_FRONTEND_BASE_URL
+          value: http://open-webui.rit-genai-naga-dev.svc:80
+        - name: PORTKEY_BASE_URL
+          value: https://ai-gateway.apps.cloud.rt.nyu.edu/v1
+        - name: QUALITY_ENVIRONMENT
+          value: openshift-dev
+        - name: QUALITY_REPOSITORY
+          value: AI_Tutor_Analysis
+        - name: QUALITY_BRANCH
+          value: feature/test-suite-expansion
+        - name: QUALITY_SOURCE
+          value: openshift-backend-build-triggered-checks
+        - name: QUALITY_COMMIT_SHA
+          value: openshift-build
+        - name: QUALITY_STRICT_LIVE_CHECKS
+          value: "1"
+        - name: QUALITY_PUSHGATEWAY_URL
+          value: http://ai-tutor-quality-pushgateway:9091
+        - name: PORTKEY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: open-webui-mastering-homework-secret
+              key: portkey-api-key
+        - name: PIPELINE_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: open-webui-mastering-homework-secret
+              key: pipeline-database-url
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: open-webui-mastering-homework-secret
+              key: database-url
   output:
     to:
       kind: ImageStreamTag
       name: ai-tutor-quality-checks:latest
+  postCommit:
+    script: bash scripts/run_openshift_quality_checks.sh
+  triggers:
+    - type: ImageChange
+      imageChange:
+        from:
+          kind: ImageStreamTag
+          name: open-webui-mastering-homework:latest
   resources:
     requests:
       cpu: 250m

@@ -1,8 +1,8 @@
-# AI Tutor Backend Post-Deployment Quality Checks on OpenShift
+# AI Tutor Backend Build-Triggered Quality Checks on OpenShift
 
-This runs AI Tutor backend checks after the OpenShift dev backend deployment is rebuilt and rolled out.
+This runs AI Tutor backend deployed-environment checks from OpenShift whenever the dev backend app image is rebuilt.
 
-It is intentionally not scheduled. The point is to answer: "Did this newly deployed backend work from inside OpenShift dev?"
+It is intentionally not scheduled. The point is to answer: "Did this backend build still work from inside OpenShift dev?"
 
 For the full local, GitHub Actions, and OpenShift testing picture, see:
 
@@ -12,9 +12,18 @@ For the full local, GitHub Actions, and OpenShift testing picture, see:
 ## What It Creates
 
 - `ai-tutor-quality-checks` backend test image build
-- one short-lived backend `Job`: `ai-tutor-backend-post-deploy-quality-check`
 
-The Job uses resources only while it runs, sends metrics to the OpenShift Pushgateway, then exits.
+The quality checks run as the `postCommit` hook of the quality-check image build. The build uses resources only while it runs, sends metrics to the OpenShift Pushgateway, then exits.
+
+The quality-check BuildConfig has an `ImageChange` trigger on:
+
+```text
+open-webui-mastering-homework:latest
+```
+
+When the backend app BuildConfig pushes a new `open-webui-mastering-homework:latest` image, OpenShift starts `ai-tutor-quality-checks`. The quality build then runs the OpenShift smoke, integration, health, and external-service checks.
+
+This is a lightweight BuildConfig-only automation. It removes the manual test trigger, but it is not a full deployment pipeline gate. The hook runs after the quality-check image is built, and the checks poll the deployed services. If strict "new image is fully rolled out before tests start" guarantees are required, use OpenShift Pipelines/Tekton or an ArgoCD post-sync hook.
 
 ## What It Checks
 
@@ -31,28 +40,45 @@ pytest --noconftest tests/live -m "live and (smoke or integration or health or e
 
 `QUALITY_STRICT_LIVE_CHECKS=1` is enabled in OpenShift so missing required configuration, such as a Portkey key or database URL, is reported as a failed quality signal instead of being silently skipped.
 
-## One-Time Build Setup
+## One-Time Setup
 
 ```bash
 oc apply -f k8s/quality-checks/buildconfig.yaml -n rit-genai-naga-dev
+```
+
+## Automatic Build-Triggered Test Flow
+
+After setup, the normal backend app build triggers these checks automatically:
+
+```bash
+oc start-build open-webui-mastering-homework --follow -n rit-genai-naga-dev
+```
+
+Expected OpenShift flow:
+
+```text
+open-webui-mastering-homework build finishes
+open-webui-mastering-homework:latest image stream updates
+ai-tutor-quality-checks build starts from the image-change trigger
+ai-tutor-quality-checks postCommit runs scripts/run_openshift_quality_checks.sh
+metrics are pushed to ai-tutor-quality-pushgateway
+```
+
+If the quality checks fail, the `ai-tutor-quality-checks` build fails and the logs show the pytest failure.
+
+## Manual Validation
+
+```bash
 oc start-build ai-tutor-quality-checks --follow -n rit-genai-naga-dev
 ```
 
-## Build, Deploy, and Test
-
-This uses the current user's OpenShift permissions. It starts the backend quality image build, starts the backend app build, waits for rollout, runs the quality Job, sends metrics, and exits.
-
-```bash
-bash scripts/run_backend_build_deploy_quality_check.sh
-```
-
-If the backend was already rebuilt and you only want to run the post-deployment check:
+The older Job-based runner is still available for explicit reruns after a rollout:
 
 ```bash
 bash scripts/run_post_deploy_quality_check.sh
 ```
 
-The script runs these steps: wait for rollout, delete the previous completed Job, apply the Job manifest, wait for completion, and print logs.
+The Job script runs these steps: wait for rollout, delete the previous completed Job, apply the Job manifest, wait for completion, and print logs.
 
 ## Grafana
 
