@@ -265,6 +265,7 @@ Frontend OpenShift environment defaults:
 - `PLAYWRIGHT_BASE_URL=http://open-webui.rit-genai-naga-dev.svc:80`
 - `PLAYWRIGHT_WORKERS=1`
 - `PLAYWRIGHT_RETRIES=0`
+- `PLAYWRIGHT_TIMEOUT=60000`
 - `PLAYWRIGHT_VIDEO=on`
 - `PLAYWRIGHT_HOMEWORK_PDF_PATH=/workspace/playwright/fixtures/Math_HW.pdf`
 - `QUALITY_ENVIRONMENT=openshift-dev`
@@ -295,6 +296,7 @@ Frontend resource profile:
 - explicit Job request: `1 CPU`, `2Gi memory`
 - explicit Job limit: `2 CPU`, `4Gi memory`
 - Playwright workers: `1`
+- Playwright timeout: `60000ms`
 - video: `on`
 
 ## Metrics and Dashboards
