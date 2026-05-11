@@ -226,6 +226,15 @@ def read_json_or_default(key: str, default: object) -> object:
         return default
 
 
+def truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def already_synced(prefix: str, run_id: str) -> bool:
+    latest = read_json_or_default(f"{prefix}/latest.json", {})
+    return isinstance(latest, dict) and str(latest.get("run_id", "")) == run_id
+
+
 def update_index(prefix: str, metadata: dict[str, object], limit: int = 20) -> None:
     index_key = f"{prefix}/index.json"
     index = read_json_or_default(index_key, [])
@@ -328,7 +337,14 @@ def sync_github_playwright(args: argparse.Namespace) -> None:
     repo = env("GITHUB_REPOSITORY_NAME", "NAGA-open-webui")
     branch = env("GITHUB_BRANCH_FILTER", "rs/ai-tutor-tests")
     prefix = env("ARTIFACT_PREFIX", "github/NAGA-open-webui/playwright")
+    skip_existing = truthy(env("GITHUB_ARTIFACT_SKIP_EXISTING", "true"))
     synced = 0
+    report_artifact = newest_artifact(owner, repo, "playwright-report", token, branch)
+    if report_artifact is not None:
+        report_run_id = str(report_artifact.get("workflow_run", {}).get("id") or report_artifact.get("id"))
+        if skip_existing and already_synced(prefix, report_run_id):
+            print(f"GitHub Playwright artifacts for run {report_run_id} are already synced.")
+            return
 
     for artifact_name in ARTIFACT_NAMES:
         artifact = newest_artifact(owner, repo, artifact_name, token, branch)
@@ -375,12 +391,17 @@ def sync_github_backend(args: argparse.Namespace) -> None:
     branch = env("GITHUB_BRANCH_FILTER", "feature/test-suite-expansion")
     artifact_name = env("GITHUB_ARTIFACT_NAME", BACKEND_GITHUB_ARTIFACT_NAME)
     prefix = env("ARTIFACT_PREFIX", "github/backend/feature-test-suite-expansion")
+    skip_existing = truthy(env("GITHUB_ARTIFACT_SKIP_EXISTING", "true"))
     artifact = newest_artifact(owner, repo, artifact_name, token, branch)
     if artifact is None:
         raise SystemExit(f"No usable artifact found: {repo}/{artifact_name}")
 
-    archive_bytes = github_bytes(artifact["archive_download_url"], token)
     run_id = str(artifact.get("workflow_run", {}).get("id") or artifact.get("id"))
+    if skip_existing and already_synced(prefix, run_id):
+        print(f"GitHub backend artifacts for run {run_id} are already synced.")
+        return
+
+    archive_bytes = github_bytes(artifact["archive_download_url"], token)
     target_prefix = f"{prefix}/runs/{run_id}/{artifact_name}"
     summary = {"passed": 0, "failed": 0, "skipped": 0, "errors": 0, "total": 0}
     results_key = f"{target_prefix}/results.xml"
