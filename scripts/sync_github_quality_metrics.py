@@ -47,6 +47,28 @@ def request_bytes(url: str, token: str, *, method: str = "GET", body: bytes | No
         return exc.code, exc.read()
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        return None
+
+
+def download_artifact(url: str, token: str) -> bytes:
+    request = urllib.request.Request(url, headers=headers(token))
+    opener = urllib.request.build_opener(NoRedirectHandler)
+    try:
+        with opener.open(request, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code not in {301, 302, 303, 307, 308}:
+            raise RuntimeError(f"Failed to download artifact: HTTP {exc.code}")
+        redirect_url = exc.headers.get("Location")
+        if not redirect_url:
+            raise RuntimeError("GitHub artifact download did not include a redirect Location header.")
+        redirect_request = urllib.request.Request(redirect_url, headers={"User-Agent": "ai-tutor-quality-metrics-sync"})
+        with urllib.request.urlopen(redirect_request, timeout=60) as response:
+            return response.read()
+
+
 def request_json(url: str, token: str) -> dict:
     status, body = request_bytes(url, token)
     if status >= 400:
@@ -120,9 +142,7 @@ def main() -> None:
             print(f"No usable artifact found for {repo}/{artifact_name}.")
             continue
         print(f"Syncing {repo}/{artifact_name} from {artifact.get('created_at')}...")
-        status, archive = request_bytes(artifact["archive_download_url"], args.token)
-        if status >= 400:
-            raise RuntimeError(f"Failed to download artifact {artifact_name} from {repo}: HTTP {status}")
+        archive = download_artifact(artifact["archive_download_url"], args.token)
         metrics = extract_prometheus_payload(archive)
         push_to_gateway(args.pushgateway_url, args.environment, repo, metrics)
         synced += 1
