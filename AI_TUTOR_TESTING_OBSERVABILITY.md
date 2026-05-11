@@ -265,7 +265,7 @@ Frontend OpenShift environment defaults:
 - `PLAYWRIGHT_BASE_URL=http://open-webui.rit-genai-naga-dev.svc:80`
 - `PLAYWRIGHT_WORKERS=1`
 - `PLAYWRIGHT_RETRIES=0`
-- `PLAYWRIGHT_VIDEO=off`
+- `PLAYWRIGHT_VIDEO=on`
 - `PLAYWRIGHT_HOMEWORK_PDF_PATH=/workspace/playwright/fixtures/Math_HW.pdf`
 - `QUALITY_ENVIRONMENT=openshift-dev`
 - `QUALITY_REPOSITORY=NAGA-open-webui`
@@ -295,7 +295,7 @@ Frontend resource profile:
 - explicit Job request: `1 CPU`, `2Gi memory`
 - explicit Job limit: `2 CPU`, `4Gi memory`
 - Playwright workers: `1`
-- video: `off`
+- video: `on`
 
 ## Metrics and Dashboards
 
@@ -425,7 +425,7 @@ The implementation is intentionally event-driven and short-lived:
 - no CronJobs for these quality checks
 - limited build history with `successfulBuildsHistoryLimit: 2` and `failedBuildsHistoryLimit: 2`
 - completed explicit Jobs use `ttlSecondsAfterFinished: 3600`
-- Playwright runs one Chromium worker with video disabled in OpenShift
+- Playwright runs one worker in OpenShift and records video for passing and failing browser checks
 - OpenShift runs only deployed-environment validation, not duplicate CI suites
 
 Before requesting more resources, use real OpenShift runs to inspect actual build/job usage. Increase CPU or memory only if observed runs show consistent throttling, out-of-memory kills, or unacceptable runtime.
