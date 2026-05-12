@@ -17,7 +17,7 @@ The goal is to move away from Grafana Cloud and keep test observability inside `
 - The local dashboard remains available for the local Docker/Grafana demo, but it is not imported into shared OpenShift Grafana.
 - `ai-tutor-quality-grafana-provisioner` Job to create/update the Grafana datasource and dashboards through the Grafana API.
 - `ai-tutor-quality-artifact-viewer` route for the latest Playwright report copied into OpenShift object storage.
-- `ai-tutor-github-playwright-artifact-sync` one-time Job manifest for copying Playwright reports/videos after the GitHub read token is approved.
+- `ai-tutor-github-quality-sync` CronJob for importing GitHub metrics plus backend/frontend artifacts after the GitHub read token is approved.
 
 ## Why Pushgateway Exists
 
@@ -113,7 +113,7 @@ This folder implements the Prometheus/Grafana/bucket foundation first. PostgreSQ
 - OpenShift backend checks can upload JUnit XML, raw live-results XML, and redacted pytest logs to ObjectBucket/S3 under `openshift/backend/dev/runs/<run-id>/`.
 - OpenShift frontend Playwright checks can upload reports, screenshots, videos, traces, and raw result files to ObjectBucket/S3 under `openshift/frontend/dev/runs/<run-id>/`.
 - Local runs can publish to Pushgateway when port-forwarded or run inside the cluster.
-- GitHub Actions uploads Prometheus metrics as workflow artifacts. `ai-tutor-github-quality-metrics-sync` runs as an OpenShift CronJob after the GitHub token is approved, pulls the latest GitHub metrics artifacts, and publishes them to the internal Pushgateway.
+- GitHub Actions uploads Prometheus metrics and heavy reports as workflow artifacts. `ai-tutor-github-quality-sync` runs as an OpenShift CronJob after the GitHub token is approved, pulls the latest GitHub metrics/artifacts, publishes metrics to the internal Pushgateway, and copies reports into ObjectBucket/S3.
 
 The GitHub sync needs a read-only GitHub token stored in OpenShift. Use a fine-grained token with read access to Actions/artifacts and metadata for `AI_Tutor_Analysis` and `NAGA-open-webui`.
 
@@ -124,30 +124,28 @@ oc create secret generic ai-tutor-github-metrics-sync-secret \
   --dry-run=client -o yaml | oc apply -f -
 ```
 
-After the token is approved, apply the sync CronJobs:
+After the token is approved, apply the sync CronJob:
 
 ```bash
-oc apply -f k8s/observability/70-github-metrics-sync.yaml -n rit-genai-naga-dev
-oc apply -f k8s/observability/91-github-backend-artifact-sync.yaml -n rit-genai-naga-dev
-oc apply -f k8s/observability/90-github-playwright-artifact-sync.yaml -n rit-genai-naga-dev
+oc apply -f k8s/observability/70-github-quality-sync.yaml -n rit-genai-naga-dev
 ```
 
 GitHub dashboard refresh behavior:
 
-- `ai-tutor-github-quality-metrics-sync` runs every `5` minutes. It imports the latest backend and frontend GitHub metrics into Pushgateway, which Prometheus then scrapes for Grafana.
-- `ai-tutor-github-backend-artifact-sync` runs every `10` minutes. It copies the latest backend JUnit/raw artifacts into ObjectBucket/S3 if a new GitHub run exists.
-- `ai-tutor-github-playwright-artifact-sync` runs every `10` minutes. It copies the latest frontend Playwright report/videos/traces into ObjectBucket/S3 if a new GitHub run exists.
-- Each CronJob uses `concurrencyPolicy: Forbid`, short job history, small CPU/memory limits, and finished-job TTL cleanup so it does not pile up work or waste resources.
+- `ai-tutor-github-quality-sync` runs every `10` minutes.
+- Each run imports the latest backend and frontend GitHub metrics into Pushgateway, which Prometheus then scrapes for Grafana.
+- The same run copies the latest backend JUnit/raw artifacts and frontend Playwright report/videos/traces into ObjectBucket/S3 when a new GitHub run exists.
+- The CronJob uses `concurrencyPolicy: Forbid`, keeps no successful job history and one failed job for troubleshooting, and has finished-job TTL cleanup so it does not pile up topology objects or waste resources.
 
-This is intentionally pull-based from OpenShift rather than webhook-based. It avoids exposing an inbound OpenShift endpoint and avoids storing OpenShift service credentials in GitHub. The expected dashboard lag is one CronJob interval plus Prometheus scrape time, usually about `5-10` minutes after a GitHub Actions run finishes.
+This is intentionally pull-based from OpenShift rather than webhook-based. It avoids exposing an inbound OpenShift endpoint and avoids storing OpenShift service credentials in GitHub. The expected dashboard lag is one CronJob interval plus Prometheus scrape time, usually about `10` minutes after a GitHub Actions run finishes.
 
 For an immediate backfill or smoke check, create a one-off Job from the CronJob:
 
 ```bash
-oc create job ai-tutor-github-quality-metrics-sync-manual \
+oc create job ai-tutor-github-quality-sync-manual \
   -n rit-genai-naga-dev \
-  --from=cronjob/ai-tutor-github-quality-metrics-sync
-oc logs job/ai-tutor-github-quality-metrics-sync-manual -n rit-genai-naga-dev -f
+  --from=cronjob/ai-tutor-github-quality-sync
+oc logs job/ai-tutor-github-quality-sync-manual -n rit-genai-naga-dev -f
 ```
 
 ## Post-Deployment Trigger Pattern
@@ -217,18 +215,13 @@ OpenShift backend artifact upload is automatic in the backend quality runner. It
 
 The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to the bucket. Upload failures are best-effort and do not override the pytest exit status.
 
-GitHub artifact sync is automatic through the CronJobs listed above. To run an immediate manual sync, create one-off Jobs from the CronJobs:
+GitHub artifact sync is automatic through `ai-tutor-github-quality-sync`. To run an immediate manual sync, create a one-off Job from the CronJob:
 
 ```bash
-oc create job ai-tutor-github-backend-artifact-sync-manual \
+oc create job ai-tutor-github-quality-sync-manual \
   -n rit-genai-naga-dev \
-  --from=cronjob/ai-tutor-github-backend-artifact-sync
-oc logs job/ai-tutor-github-backend-artifact-sync-manual -n rit-genai-naga-dev -f
-
-oc create job ai-tutor-github-playwright-artifact-sync-manual \
-  -n rit-genai-naga-dev \
-  --from=cronjob/ai-tutor-github-playwright-artifact-sync
-oc logs job/ai-tutor-github-playwright-artifact-sync-manual -n rit-genai-naga-dev -f
+  --from=cronjob/ai-tutor-github-quality-sync
+oc logs job/ai-tutor-github-quality-sync-manual -n rit-genai-naga-dev -f
 ```
 
 The artifact sync commands skip the already-synced latest GitHub run by default (`GITHUB_ARTIFACT_SKIP_EXISTING=true`) so scheduled refreshes do not repeatedly download and re-upload the same reports.
