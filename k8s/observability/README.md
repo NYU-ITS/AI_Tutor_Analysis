@@ -213,7 +213,7 @@ OpenShift backend artifact upload is automatic in the backend quality runner. It
 - `openshift/backend/dev/latest.json`
 - `openshift/backend/dev/index.json`
 
-The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to the bucket. Upload failures are best-effort and do not override the pytest exit status.
+The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to the bucket. Upload failures are best-effort and do not override the pytest exit status. Artifact clients use `S3_REQUEST_TIMEOUT_SECONDS=10` by default so an unhealthy object-storage endpoint does not delay quality jobs for long.
 
 GitHub artifact sync is automatic through `ai-tutor-github-quality-sync`. To run an immediate manual sync, create a one-off Job from the CronJob:
 
@@ -242,3 +242,26 @@ The viewer shows the latest report plus recent runs from configured artifact pre
 If no artifact has been synced yet for a prefix, that table shows no runs until the first upload succeeds.
 
 The ObjectBucket endpoint is internal to OpenShift and uses a self-signed certificate chain, so artifact uploader/viewer pods set `BUCKET_TLS_VERIFY=false`. This is scoped only to the in-cluster bucket client path.
+
+## ObjectBucket/S3 Troubleshooting
+
+If artifact uploads time out while metrics still publish, first verify whether the S3 serving layer responds at all from inside the namespace:
+
+```bash
+oc exec deploy/ai-tutor-quality-artifact-viewer -n rit-genai-naga-dev -- \
+  curl -vk --max-time 10 https://s3.openshift-storage.svc/
+```
+
+A healthy S3 endpoint should return an HTTP response, usually an S3 XML error for an unsigned request. If TCP/TLS connects but the request receives `0` bytes until timeout, the issue is below the artifact uploader: check NooBaa/S3 service endpoints, NooBaa endpoint pods, backing object-store health, and routes in `openshift-storage`.
+
+The current failure signature observed on July 1, 2026:
+
+- OBC `ai-tutor-test-artifacts-bucket` is `Bound`.
+- Bucket config points to `s3.openshift-storage.svc:443`.
+- TCP connect to `s3.openshift-storage.svc:443` succeeds.
+- TLS handshake succeeds.
+- Anonymous `GET /` over HTTPS times out with `0` bytes received.
+- Anonymous `GET /` over HTTP port `80` also times out with `0` bytes received.
+- A 2-byte signed `PUT` using the OBC credentials also times out.
+
+That signature indicates the OpenShift/NooBaa S3 serving layer is accepting connections but not returning HTTP responses. Escalate with the commands above plus the OBC name and namespace; this cannot be corrected from the application namespace without storage-admin visibility.

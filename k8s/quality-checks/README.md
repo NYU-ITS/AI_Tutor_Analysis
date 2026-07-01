@@ -236,6 +236,7 @@ OpenShift backend runs upload deployment-level artifacts to ObjectBucket/S3 afte
 - recent run index: `openshift/backend/dev/index.json`
 
 Artifact upload is best-effort. A bucket or credential problem is logged and skipped, while the quality result still comes from the pytest exit status and pushed metrics.
+S3 requests use `S3_REQUEST_TIMEOUT_SECONDS=10` by default to fail fast when the OpenShift ObjectBucket service is unhealthy.
 
 The log uploader redacts known secret environment values and common bearer token, API key, password, and database URL patterns before any log content is written to the bucket. Do not add request payloads, student content, uploaded homework contents, tokens, or raw database rows to test logs.
 
@@ -273,3 +274,4 @@ Common failures:
 - database health failure: verify `database-url` and `pipeline-database-url`
 - route/service unreachable: verify OpenShift services and rollout state
 - no metrics in Grafana: verify Pushgateway and dashboard source labels
+- artifact upload timeout: run `curl -vk --max-time 10 https://s3.openshift-storage.svc/` from an in-namespace pod. A timeout with `0` bytes received after TCP/TLS succeeds indicates a NooBaa/S3 serving-layer issue that needs platform/storage-team help.
