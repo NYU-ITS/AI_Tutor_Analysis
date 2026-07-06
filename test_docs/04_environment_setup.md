@@ -112,7 +112,8 @@ OpenShift does not run the default unit/integration suite. It runs only `tests/l
 3. Install `student_analysis_pipeline/requirements.txt` + `tests/requirements-testing.txt`.
 4. `bash scripts/run_pytest_with_reports.sh`.
 5. Upload JUnit, coverage, and quality metrics artifacts.
-6. Forward metrics to Grafana Cloud when Grafana secrets are configured.
+6. Let the OpenShift `ai-tutor-github-quality-sync` CronJob import the latest GitHub metrics/artifacts into the namespace Pushgateway for the deployed Grafana dashboard.
+7. Optionally forward metrics to legacy Grafana Cloud when Grafana Cloud secrets are configured.
 
 Docker is pre-installed on GitHub-hosted `ubuntu-latest` runners, so nothing
 extra is required.

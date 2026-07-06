@@ -6,7 +6,7 @@
 > to understand *what* is tested, *why*, and *how to run it* locally or
 > in CI.
 
-For the current local, GitHub Actions, Grafana Cloud, and OpenShift dev deployment/testing setup, see [`../AI_TUTOR_TESTING_OBSERVABILITY.md`](../AI_TUTOR_TESTING_OBSERVABILITY.md). That overview is the canonical source for cross-repo stage ownership, OpenShift triggers, secrets, resources, and dashboard behavior. This folder focuses on the backend pytest suite itself.
+For the current local, GitHub Actions, in-cluster OpenShift Grafana, and OpenShift dev deployment/testing setup, see [`../AI_TUTOR_TESTING_OBSERVABILITY.md`](../AI_TUTOR_TESTING_OBSERVABILITY.md). That overview is the canonical source for cross-repo stage ownership, OpenShift triggers, secrets, resources, and dashboard behavior. This folder focuses on the backend pytest suite itself.
 
 ---
 

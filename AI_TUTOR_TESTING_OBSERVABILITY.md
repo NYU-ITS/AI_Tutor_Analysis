@@ -1,6 +1,6 @@
 # AI Tutor Testing and Observability
 
-Last updated: 2026-05-08
+Last updated: 2026-07-06
 
 This is the source-of-truth overview for AI Tutor test ownership, OpenShift quality checks, metrics, secrets, and dashboard expectations across the backend `AI_Tutor_Analysis` repo and the frontend `NAGA-open-webui` repo.
 
@@ -20,7 +20,7 @@ GitHub Actions owns code-level checks:
 - backend pytest unit and non-live integration tests
 - frontend Vitest unit/component tests
 - mocked Playwright UI checks
-- artifacts and Grafana Cloud metrics for CI runs
+- artifacts and Prometheus-format metrics for CI runs; OpenShift imports the latest GitHub metrics through `ai-tutor-github-quality-sync` for the deployed Grafana dashboard
 
 OpenShift owns deployed-environment checks:
 
@@ -96,7 +96,7 @@ Runs:
 - coverage output
 - JUnit artifact upload
 - quality metrics artifact upload
-- Grafana Cloud forwarding when Grafana secrets are configured
+- optional legacy Grafana Cloud forwarding when GitHub repository secrets are configured
 
 Does not run:
 
@@ -117,7 +117,7 @@ Runs:
 - mocked Playwright dashboard workflows
 - Playwright report/video artifacts
 - quality metrics artifact upload
-- Grafana Cloud forwarding when Grafana secrets are configured
+- optional legacy Grafana Cloud forwarding when GitHub repository secrets are configured
 
 Live Playwright is environment gated and is not the default GitHub path. The preferred deployed-environment live browser validation is the OpenShift frontend quality BuildConfig.
 
@@ -317,7 +317,7 @@ They must not include:
 - uploaded PDF contents
 - user credentials
 
-Grafana Cloud GitHub repository secrets:
+Optional legacy Grafana Cloud GitHub repository secrets:
 
 - `GRAFANA_CLOUD_PROMETHEUS_URL`
 - `GRAFANA_CLOUD_PROMETHEUS_USER`
@@ -330,10 +330,10 @@ OpenShift Pushgateway grouping:
 
 Dashboard JSON:
 
-- backend overview: `AI_Tutor_Analysis/observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
-- frontend overview: `NAGA-open-webui/observability/grafana/dashboards/ai-tutor-frontend-github-quality.json`
 - deployed OpenShift dashboard: `AI_Tutor_Analysis/k8s/observability/50-grafana-dashboard.yaml`
 - deployed GitHub dashboard: `AI_Tutor_Analysis/k8s/observability/51-github-dashboard.yaml`
+- legacy/import-only Grafana Cloud backend overview: `AI_Tutor_Analysis/observability/grafana/dashboards/grafana-cloud-ai-tutor-quality.json`
+- legacy/import-only Grafana Cloud frontend overview: `NAGA-open-webui/observability/grafana/dashboards/ai-tutor-frontend-github-quality.json`
 
 Dashboard expectations:
 
@@ -375,14 +375,20 @@ oc apply -f k8s/observability/01-artifact-bucket-lifecycle-job.yaml -n rit-genai
 oc logs job/ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev -f
 ```
 
-GitHub backend artifact sync:
+GitHub metrics and artifact sync:
 
 ```bash
 cd AI_Tutor_Analysis
-oc delete job ai-tutor-github-backend-artifact-sync -n rit-genai-naga-dev --ignore-not-found
-oc apply -f k8s/observability/91-github-backend-artifact-sync.yaml -n rit-genai-naga-dev
-oc logs job/ai-tutor-github-backend-artifact-sync -n rit-genai-naga-dev -f
+oc apply -f k8s/observability/70-github-quality-sync.yaml -n rit-genai-naga-dev
+oc create job ai-tutor-github-quality-sync-manual \
+  -n rit-genai-naga-dev \
+  --from=cronjob/ai-tutor-github-quality-sync
+oc logs job/ai-tutor-github-quality-sync-manual -n rit-genai-naga-dev -f
 ```
+
+The CronJob imports both backend and frontend GitHub metrics/artifacts when the
+read-only GitHub token has access. Keep it suspended if token access is not
+ready, and resume it once GitHub Actions/artifact reads are confirmed.
 
 Backend manual quality rerun:
 
@@ -438,4 +444,4 @@ Before requesting more resources, use real OpenShift runs to inspect actual buil
 - The frontend trigger depends on OpenShift importing the external registry digest into the `open-webui:latest` ImageStreamTag.
 - For strict "build, rollout, then test immediately" orchestration, use OpenShift Pipelines/Tekton or ArgoCD post-sync hooks with team-approved service-account RBAC.
 - GitHub Actions should not access VPN-only OpenShift dev services unless a secure service-account-based path is approved.
-- Grafana Cloud is external SaaS; if that is not acceptable, move metrics fully into OpenShift user-workload monitoring or an in-cluster Grafana/Prometheus setup.
+- Grafana Cloud forwarding remains optional/legacy. The deployed dev dashboard path is the in-cluster Prometheus, Pushgateway, and Grafana stack in `rit-genai-naga-dev`.

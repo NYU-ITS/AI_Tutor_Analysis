@@ -74,7 +74,7 @@ The API is now available at `http://localhost:8000`.
 
 ## Test Automation
 
-For the current full local, GitHub Actions, Grafana Cloud, and OpenShift dev setup, see:
+For the current full local, GitHub Actions, in-cluster OpenShift Grafana, and OpenShift dev setup, see:
 
 - [AI_TUTOR_TESTING_OBSERVABILITY.md](AI_TUTOR_TESTING_OBSERVABILITY.md)
 - [k8s/quality-checks/README.md](k8s/quality-checks/README.md)
@@ -116,7 +116,7 @@ The workflow at `.github/workflows/tests.yml` runs on:
 
 It uploads the whole `test-results/` directory as an artifact so the team can inspect the XML outputs immediately from the Actions run.
 
-When Grafana Cloud secrets are configured, the workflow also forwards test metrics to Grafana Cloud. GitHub Actions does not log into OpenShift and does not use personal `oc login` tokens.
+GitHub Actions uploads Prometheus-format quality metrics as artifacts. The OpenShift `ai-tutor-github-quality-sync` CronJob imports the latest GitHub metrics into the namespace Pushgateway for the deployed Grafana dashboard. Optional legacy Grafana Cloud forwarding remains available only when Grafana Cloud secrets are configured. GitHub Actions does not log into OpenShift and does not use personal `oc login` tokens.
 
 ## Local Observability Demo
 
