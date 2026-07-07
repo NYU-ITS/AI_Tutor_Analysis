@@ -834,7 +834,7 @@ spec:
           },
           "options": {
             "mode": "markdown",
-            "content": "Open the artifact viewer for the latest and recent Playwright reports: [AI Tutor Quality Artifacts](https://ai-tutor-quality-artifacts-rit-genai-naga-dev.apps.cloud.rt.nyu.edu).\n\nPrometheus stores numeric history for 30 days. Heavy reports, screenshots, videos, traces, and future Allure output belong in ObjectBucket/S3."
+            "content": "Open the artifact viewer for the latest and recent Playwright reports: [AI Tutor Quality Artifacts](https://ai-tutor-quality-artifacts-rit-genai-naga-dev.apps.cloud.rt.nyu.edu).\n\nPrometheus stores numeric history for 30 days. Heavy reports, screenshots, videos, traces, and future Allure output live in the artifact store (artifact viewer backed by a PVC for now, 30-day cleanup)."
           }
         }
       ]

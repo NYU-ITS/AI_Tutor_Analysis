@@ -1,0 +1,19 @@
+# Dedicated RWX volume for AI Tutor quality artifacts (JUnit XML, redacted logs,
+# Playwright reports/videos/traces, synced GitHub artifacts). Shared by the quality
+# Jobs, the artifact viewer, the GitHub sync CronJob, and the cleanup CronJob.
+# Retention is enforced by the ai-tutor-quality-artifact-cleanup CronJob (30 days).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-tutor-quality-artifacts
+  labels:
+    app.kubernetes.io/name: ai-tutor-quality-artifacts
+    app.kubernetes.io/component: artifact-storage
+    app.kubernetes.io/part-of: ai-tutor-observability
+spec:
+  storageClassName: vastdata-cloud
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi

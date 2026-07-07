@@ -6,7 +6,8 @@ The goal is to move away from Grafana Cloud and keep test observability inside `
 
 ## What This Creates
 
-- `ai-tutor-test-artifacts-bucket` ObjectBucketClaim for Playwright/Allure artifacts.
+- `ai-tutor-quality-artifacts` PVC (RWX, `vastdata-cloud`, `20Gi`) for heavy test artifacts: backend JUnit/raw XML and redacted logs, Playwright reports/videos/traces, and synced GitHub artifacts.
+- `ai-tutor-quality-artifact-cleanup` CronJob enforcing 30-day artifact retention on that PVC.
 - `ai-tutor-quality-pushgateway` for short-lived test Jobs to publish final metrics.
 - `ai-tutor-quality-prometheus` for time-series test metrics.
 - `ai-tutor-quality-grafana` for the team dashboard.
@@ -16,7 +17,7 @@ The goal is to move away from Grafana Cloud and keep test observability inside `
   - `AI Tutor Quality - GitHub` for GitHub Actions results once GitHub metrics are routed into the OpenShift metrics store.
 - The local dashboard remains available for the local Docker/Grafana demo, but it is not imported into shared OpenShift Grafana.
 - `ai-tutor-quality-grafana-provisioner` Job to create/update the Grafana datasource and dashboards through the Grafana API.
-- `ai-tutor-quality-artifact-viewer` route for the latest Playwright report copied into OpenShift object storage.
+- `ai-tutor-quality-artifact-viewer` route for the latest Playwright report served from the artifact PVC.
 - `ai-tutor-github-quality-sync` CronJob for importing GitHub metrics plus backend/frontend artifacts after the GitHub read token is approved.
 
 ## Why Pushgateway Exists
@@ -27,7 +28,7 @@ AI Tutor test Jobs are short-lived. They run, publish results, and exit. A norma
 
 This is only for test result metrics. Application metrics should use normal Prometheus scraping when available.
 
-Pushgateway grouping is intentionally kept stable by `environment` and `repository`. It does not group by run id or commit sha because that would leave old batch results behind and make the dashboard look like stale failures are still current. Prometheus keeps numeric time history for trend panels, while ObjectBucket/S3 keeps heavy artifacts and recent-run indexes.
+Pushgateway grouping is intentionally kept stable by `environment` and `repository`. It does not group by run id or commit sha because that would leave old batch results behind and make the dashboard look like stale failures are still current. Prometheus keeps numeric time history for trend panels, while the artifact PVC keeps heavy artifacts and recent-run indexes.
 
 ## Resource Requests
 
@@ -38,7 +39,7 @@ Initial conservative requests:
 | Pushgateway | `50m CPU`, `128Mi` | `250m CPU`, `256Mi` | none |
 | Prometheus | `250m CPU`, `512Mi` | `1 CPU`, `2Gi` | `10Gi` PVC |
 | Grafana | `250m CPU`, `512Mi` | `1 CPU`, `1Gi` | `5Gi` PVC |
-| Artifact bucket | n/a | n/a | object storage |
+| Artifact store | n/a | n/a | `20Gi` RWX PVC |
 
 These are dev starting values. After deployment, check real usage before increasing them:
 
@@ -50,7 +51,8 @@ oc get pvc -n rit-genai-naga-dev | grep ai-tutor-quality
 ## Apply Order
 
 ```bash
-oc apply -f k8s/observability/00-artifact-bucket.yaml -n rit-genai-naga-dev
+oc apply -f k8s/observability/01-artifact-pvc.yaml -n rit-genai-naga-dev
+oc apply -f k8s/observability/02-artifact-cleanup-cronjob.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/10-pushgateway.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/20-prometheus.yaml -n rit-genai-naga-dev
 oc apply -f k8s/observability/30-grafana.yaml -n rit-genai-naga-dev
@@ -103,17 +105,17 @@ Initial dev retention:
 
 - Prometheus metrics: `30d`, enforced by `--storage.tsdb.retention.time=30d` in `20-prometheus.yaml`
 - PostgreSQL detailed test history: planned next, target `90d`
-- S3 artifacts: `30d`, enforced by the S3 lifecycle policy in `01-artifact-bucket-lifecycle-job.yaml`
+- PVC artifacts: `30d`, enforced by the daily `ai-tutor-quality-artifact-cleanup` CronJob in `02-artifact-cleanup-cronjob.yaml`
 
-This folder implements the Prometheus/Grafana/bucket foundation first. PostgreSQL result tables are intentionally deferred until searchable per-test history is needed.
+This folder implements the Prometheus/Grafana/artifact-store foundation first. PostgreSQL result tables are intentionally deferred until searchable per-test history is needed.
 
 ## Current Data Sources
 
 - OpenShift post-deployment Jobs can publish directly to `ai-tutor-quality-pushgateway`.
-- OpenShift backend checks can upload JUnit XML, raw live-results XML, and redacted pytest logs to ObjectBucket/S3 under `openshift/backend/dev/runs/<run-id>/`.
-- OpenShift frontend Playwright checks can upload reports, screenshots, videos, traces, and raw result files to ObjectBucket/S3 under `openshift/frontend/dev/runs/<run-id>/`.
+- OpenShift backend checks upload JUnit XML, raw live-results XML, and redacted pytest logs to the artifact PVC under `openshift/backend/dev/runs/<run-id>/`.
+- OpenShift frontend Playwright checks upload reports, screenshots, videos, traces, and raw result files to the artifact PVC under `openshift/frontend/dev/runs/<run-id>/`.
 - Local runs can publish to Pushgateway when port-forwarded or run inside the cluster.
-- GitHub Actions uploads Prometheus metrics and heavy reports as workflow artifacts. `ai-tutor-github-quality-sync` runs as an OpenShift CronJob after the GitHub token is approved, pulls the latest GitHub metrics/artifacts, publishes metrics to the internal Pushgateway, and copies reports into ObjectBucket/S3.
+- GitHub Actions uploads Prometheus metrics and heavy reports as workflow artifacts. `ai-tutor-github-quality-sync` runs as an OpenShift CronJob after the GitHub token is approved, pulls the latest GitHub metrics/artifacts, publishes metrics to the internal Pushgateway, and copies reports onto the artifact PVC. The CronJob manifest ships with `suspend: true` until GitHub token access is confirmed working.
 
 The GitHub sync needs a read-only GitHub token stored in OpenShift. Use a fine-grained token with read access to Actions/artifacts and metadata for `AI_Tutor_Analysis` and `NAGA-open-webui`.
 
@@ -124,17 +126,18 @@ oc create secret generic ai-tutor-github-metrics-sync-secret \
   --dry-run=client -o yaml | oc apply -f -
 ```
 
-After the token is approved, apply the sync CronJob:
+After the token is approved, apply the sync CronJob and unsuspend it:
 
 ```bash
 oc apply -f k8s/observability/70-github-quality-sync.yaml -n rit-genai-naga-dev
+oc patch cronjob ai-tutor-github-quality-sync -n rit-genai-naga-dev -p '{"spec":{"suspend":false}}'
 ```
 
 GitHub dashboard refresh behavior:
 
 - `ai-tutor-github-quality-sync` runs every `10` minutes.
 - Each run imports the latest backend and frontend GitHub metrics into Pushgateway, which Prometheus then scrapes for Grafana.
-- The same run copies the latest backend JUnit/raw artifacts and frontend Playwright report/videos/traces into ObjectBucket/S3 when a new GitHub run exists.
+- The same run copies the latest backend JUnit/raw artifacts and frontend Playwright report/videos/traces onto the artifact PVC when a new GitHub run exists.
 - The CronJob uses `concurrencyPolicy: Forbid`, keeps no successful job history and one failed job for troubleshooting, and has finished-job TTL cleanup so it does not pile up topology objects or waste resources.
 
 This is intentionally pull-based from OpenShift rather than webhook-based. It avoids exposing an inbound OpenShift endpoint and avoids storing OpenShift service credentials in GitHub. The expected dashboard lag is one CronJob interval plus Prometheus scrape time, usually about `10` minutes after a GitHub Actions run finishes.
@@ -186,18 +189,26 @@ oc logs job/ai-tutor-frontend-post-deploy-quality-check -n rit-genai-naga-dev -f
 
 ## Artifact Direction
 
-The ObjectBucketClaim stores heavy quality artifacts in OpenShift-owned object storage: backend JUnit/live XML and redacted logs, frontend Playwright reports, screenshots, videos, traces, and synced GitHub artifacts where available.
+Heavy quality artifacts live on the dedicated `ai-tutor-quality-artifacts` PVC: backend JUnit/live XML and redacted logs, frontend Playwright reports, screenshots, videos, traces, and synced GitHub artifacts where available. All artifact tooling reads `ARTIFACT_STORAGE_BACKEND` (`filesystem` on the PVC today, `s3` kept as a code path for a future object-storage migration) and `ARTIFACT_ROOT` (`/artifacts`). Artifact logical paths and the viewer's `/artifact/...` URL shape are backend-independent, so Grafana links do not change if storage moves back to S3 later.
 
-Apply the bucket and the retention policy:
+Apply the PVC and the retention CronJob:
 
 ```bash
-oc apply -f k8s/observability/00-artifact-bucket.yaml -n rit-genai-naga-dev
-oc delete job ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev --ignore-not-found
-oc apply -f k8s/observability/01-artifact-bucket-lifecycle-job.yaml -n rit-genai-naga-dev
-oc logs job/ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev -f
+oc apply -f k8s/observability/01-artifact-pvc.yaml -n rit-genai-naga-dev
+oc apply -f k8s/observability/02-artifact-cleanup-cronjob.yaml -n rit-genai-naga-dev
 ```
 
-The lifecycle Job applies an S3 bucket lifecycle rule that expires all quality artifacts after `30` days and aborts incomplete multipart uploads after one day.
+The cleanup CronJob runs daily, deletes artifact files older than `30` days strictly under `/artifacts`, removes empty run directories, and prunes `index.json`/`latest.json` entries whose runs were removed. To verify it manually, run a dry-run from the artifact viewer pod (same image, same PVC mount) before triggering the real thing:
+
+```bash
+oc exec deploy/ai-tutor-quality-artifact-viewer -n rit-genai-naga-dev -- \
+  python scripts/quality_artifact_store.py cleanup-filesystem --days 30 --dry-run
+oc create job ai-tutor-quality-artifact-cleanup-manual \
+  -n rit-genai-naga-dev \
+  --from=cronjob/ai-tutor-quality-artifact-cleanup
+oc logs job/ai-tutor-quality-artifact-cleanup-manual -n rit-genai-naga-dev -f
+oc delete job ai-tutor-quality-artifact-cleanup-manual -n rit-genai-naga-dev
+```
 
 The viewer can be applied any time:
 
@@ -213,7 +224,9 @@ OpenShift backend artifact upload is automatic in the backend quality runner. It
 - `openshift/backend/dev/latest.json`
 - `openshift/backend/dev/index.json`
 
-The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to the bucket. Upload failures are best-effort and do not override the pytest exit status. Artifact clients use `S3_REQUEST_TIMEOUT_SECONDS=10` by default so an unhealthy object-storage endpoint does not delay quality jobs for long.
+The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to artifact storage. Upload failures are best-effort and do not override the pytest exit status. When the `s3` backend is re-enabled in the future, artifact clients use `S3_REQUEST_TIMEOUT_SECONDS=10` by default so an unhealthy object-storage endpoint does not delay quality jobs for long.
+
+Build-triggered checks (BuildConfig `postCommit`) publish metrics only and set `QUALITY_UPLOAD_BACKEND_ARTIFACTS=0`, because build pods cannot mount PVCs. Artifacts come from the post-deploy Job, which mounts the PVC at `/artifacts`.
 
 GitHub artifact sync is automatic through `ai-tutor-github-quality-sync`. To run an immediate manual sync, create a one-off Job from the CronJob:
 
@@ -241,11 +254,11 @@ The viewer shows the latest report plus recent runs from configured artifact pre
 
 If no artifact has been synced yet for a prefix, that table shows no runs until the first upload succeeds.
 
-The ObjectBucket endpoint is internal to OpenShift and uses a self-signed certificate chain, so artifact uploader/viewer pods set `BUCKET_TLS_VERIFY=false`. This is scoped only to the in-cluster bucket client path.
+## Deprecated ObjectBucket/S3 Path
 
-## ObjectBucket/S3 Troubleshooting
+The original artifact target was the `ai-tutor-test-artifacts-bucket` ObjectBucketClaim (`00-artifact-bucket.yaml`, NooBaa-backed). It was retired on July 7, 2026 because the NooBaa S3 serving layer accepted TCP/TLS but never returned HTTP responses. The OBC is intentionally left in place but is no longer referenced by any quality job, the viewer, or the sync CronJob. The `s3` storage backend remains in `scripts/quality_artifact_store.py` (`ARTIFACT_STORAGE_BACKEND=s3`, `apply-lifecycle` subcommand) for a future migration to a working bucket.
 
-If artifact uploads time out while metrics still publish, first verify whether the S3 serving layer responds at all from inside the namespace:
+The troubleshooting notes below are kept for that future S3 path. If S3 artifact uploads time out while metrics still publish, first verify whether the S3 serving layer responds at all from inside the namespace:
 
 ```bash
 oc exec deploy/ai-tutor-quality-artifact-viewer -n rit-genai-naga-dev -- \

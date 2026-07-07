@@ -44,8 +44,10 @@ spec:
               value: http://ai-tutor-quality-pushgateway:9091
             - name: ARTIFACT_PREFIX
               value: openshift/backend/dev
-            - name: BUCKET_TLS_VERIFY
-              value: "false"
+            - name: ARTIFACT_STORAGE_BACKEND
+              value: filesystem
+            - name: ARTIFACT_ROOT
+              value: /artifacts
             - name: PORTKEY_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -61,11 +63,9 @@ spec:
                 secretKeyRef:
                   name: open-webui-mastering-homework-secret
                   key: database-url
-          envFrom:
-            - secretRef:
-                name: ai-tutor-test-artifacts-bucket
-            - configMapRef:
-                name: ai-tutor-test-artifacts-bucket
+          volumeMounts:
+            - name: quality-artifacts
+              mountPath: /artifacts
           resources:
             requests:
               cpu: 100m
@@ -81,3 +81,7 @@ spec:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+      volumes:
+        - name: quality-artifacts
+          persistentVolumeClaim:
+            claimName: ai-tutor-quality-artifacts

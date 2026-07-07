@@ -676,7 +676,7 @@ spec:
           },
           "options": {
             "mode": "markdown",
-            "content": "GitHub metrics are synced into OpenShift from Actions artifacts. Playwright reports can be copied into ObjectBucket/S3 and viewed from [AI Tutor Quality Artifacts](https://ai-tutor-quality-artifacts-rit-genai-naga-dev.apps.cloud.rt.nyu.edu)."
+            "content": "GitHub metrics are synced into OpenShift from Actions artifacts. Playwright reports are copied into the artifact store (artifact viewer backed by a PVC for now) and viewed from [AI Tutor Quality Artifacts](https://ai-tutor-quality-artifacts-rit-genai-naga-dev.apps.cloud.rt.nyu.edu)."
           }
         }
       ]

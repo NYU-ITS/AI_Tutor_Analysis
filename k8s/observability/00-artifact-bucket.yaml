@@ -1,3 +1,10 @@
+# DEPRECATED — do not apply as part of the standard deployment flow.
+# The NooBaa S3 endpoint behind this ObjectBucketClaim accepts TCP/TLS but never
+# returns HTTP responses (observed 2026-07-01), so quality artifacts moved to the
+# ai-tutor-quality-artifacts PVC (01-artifact-pvc.yaml) with
+# ARTIFACT_STORAGE_BACKEND=filesystem. This manifest is kept only for a possible
+# future S3 restoration (set ARTIFACT_STORAGE_BACKEND=s3 and re-wire the bucket
+# Secret/ConfigMap into the quality jobs, viewer, and sync CronJob).
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:

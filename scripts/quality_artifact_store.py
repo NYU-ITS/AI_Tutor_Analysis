@@ -20,7 +20,7 @@ import urllib.request
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 
 ARTIFACT_NAMES = ["playwright-report", "playwright-videos"]
@@ -146,7 +146,44 @@ def s3_request(method: str, key: str, body: bytes = b"", query: str = "", conten
         return response.read()
 
 
+def storage_backend() -> str:
+    backend = env("ARTIFACT_STORAGE_BACKEND", "filesystem").lower() or "filesystem"
+    if backend not in {"filesystem", "s3"}:
+        raise SystemExit(f"Unsupported ARTIFACT_STORAGE_BACKEND: {backend}")
+    return backend
+
+
+def artifact_root() -> Path:
+    return Path(env("ARTIFACT_ROOT", "/artifacts"))
+
+
+def artifact_key_path(key: str) -> Path:
+    pure = PurePosixPath(key)
+    if pure.is_absolute() or not pure.parts or ".." in pure.parts:
+        raise ValueError(f"Unsafe artifact key: {key!r}")
+    return artifact_root().joinpath(*pure.parts)
+
+
+def put_bytes(key: str, body: bytes, content_type: str = "application/octet-stream") -> None:
+    if storage_backend() == "s3":
+        s3_request("PUT", key, body, content_type=content_type)
+        return
+    path = artifact_key_path(key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    temp_path.write_bytes(body)
+    os.replace(temp_path, path)
+
+
+def get_bytes(key: str) -> bytes:
+    if storage_backend() == "s3":
+        return s3_request("GET", key)
+    return artifact_key_path(key).read_bytes()
+
+
 def apply_lifecycle(days: int) -> None:
+    if storage_backend() != "s3":
+        raise SystemExit("apply-lifecycle only applies to ARTIFACT_STORAGE_BACKEND=s3; use cleanup-filesystem for the PVC backend.")
     body = f"""<?xml version="1.0" encoding="UTF-8"?>
 <LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
   <Rule>
@@ -166,6 +203,69 @@ def apply_lifecycle(days: int) -> None:
 """.encode("utf-8")
     s3_request("PUT", "", body, query="lifecycle=", content_type="application/xml")
     print(f"Applied S3 lifecycle policy: expire artifacts after {days} day(s).")
+
+
+INDEX_FILE_NAMES = {"latest.json", "index.json"}
+
+
+def prune_filesystem_indexes(root: Path, dry_run: bool) -> int:
+    pruned = 0
+    for index_path in sorted(root.rglob("index.json")):
+        prefix_dir = index_path.parent
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            index = []
+        if not isinstance(index, list):
+            index = []
+        kept = [
+            item
+            for item in index
+            if isinstance(item, dict) and (prefix_dir / "runs" / str(item.get("run_id", ""))).is_dir()
+        ]
+        if len(kept) == len(index):
+            continue
+        pruned += len(index) - len(kept)
+        relative_prefix = prefix_dir.relative_to(root)
+        if dry_run:
+            print(f"[dry-run] would prune {len(index) - len(kept)} expired run(s) from {relative_prefix}/index.json")
+            continue
+        index_path.write_text(json.dumps(kept, indent=2), encoding="utf-8")
+        latest_path = prefix_dir / "latest.json"
+        latest_path.write_text(json.dumps(kept[0] if kept else {}, indent=2), encoding="utf-8")
+        print(f"Pruned {len(index) - len(kept)} expired run(s) from {relative_prefix}/index.json")
+    return pruned
+
+
+def cleanup_filesystem(days: int, dry_run: bool) -> None:
+    if storage_backend() != "filesystem":
+        raise SystemExit("cleanup-filesystem requires ARTIFACT_STORAGE_BACKEND=filesystem.")
+    root = artifact_root().resolve()
+    if not root.is_dir():
+        print(f"Artifact root {root} does not exist; nothing to clean.")
+        return
+    cutoff = time.time() - days * 86400
+    removed = 0
+    for path in sorted(root.rglob("*"), reverse=True):
+        if path.is_symlink() or not path.is_file() or path.name in INDEX_FILE_NAMES:
+            continue
+        if path.stat().st_mtime >= cutoff:
+            continue
+        if dry_run:
+            print(f"[dry-run] would delete {path.relative_to(root)}")
+            removed += 1
+            continue
+        path.unlink()
+        removed += 1
+    if not dry_run:
+        for directory in sorted((item for item in root.rglob("*") if item.is_dir()), key=lambda item: len(item.parts), reverse=True):
+            try:
+                directory.rmdir()
+            except OSError:
+                continue
+    pruned = prune_filesystem_indexes(root, dry_run)
+    mode = "[dry-run] " if dry_run else ""
+    print(f"{mode}Artifact cleanup under {root}: {removed} file(s) older than {days} day(s), {pruned} index entr(y/ies) pruned.")
 
 
 def github_headers(token: str) -> dict[str, str]:
@@ -225,12 +325,12 @@ def safe_zip_name(name: str) -> str | None:
 
 
 def upload_latest_marker(prefix: str, metadata: dict[str, str]) -> None:
-    s3_request("PUT", f"{prefix}/latest.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
+    put_bytes(f"{prefix}/latest.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
 
 
 def read_json_or_default(key: str, default: object) -> object:
     try:
-        return json.loads(s3_request("GET", key).decode("utf-8"))
+        return json.loads(get_bytes(key).decode("utf-8"))
     except Exception:
         return default
 
@@ -252,7 +352,7 @@ def update_index(prefix: str, metadata: dict[str, object], limit: int = 20) -> N
     run_id = str(metadata.get("run_id", ""))
     index = [item for item in index if item.get("run_id") != run_id]
     index.insert(0, metadata)
-    s3_request("PUT", index_key, json.dumps(index[:limit], indent=2).encode("utf-8"), content_type="application/json")
+    put_bytes(index_key, json.dumps(index[:limit], indent=2).encode("utf-8"), content_type="application/json")
 
 
 def parse_junit_summary(path: str | None) -> dict[str, int]:
@@ -299,7 +399,7 @@ def put_file(key: str, path: str, redact: bool = False) -> bool:
         with open(path, "rb") as handle:
             payload = handle.read()
         content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
-    s3_request("PUT", key, payload, content_type=content_type)
+    put_bytes(key, payload, content_type=content_type)
     return True
 
 
@@ -334,7 +434,7 @@ def upload_openshift_backend(args: argparse.Namespace) -> None:
         "raw_results_path": f"/artifact/{run_prefix}/raw/live-results.xml",
         "log_path": f"/artifact/{run_prefix}/logs/backend-quality-redacted.log" if args.log else "",
     }
-    s3_request("PUT", f"{run_prefix}/metadata.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
+    put_bytes(f"{run_prefix}/metadata.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
     upload_latest_marker(prefix, metadata)
     update_index(prefix, metadata)
     print(f"Uploaded {uploaded} OpenShift backend artifact file(s) to {run_prefix}.")
@@ -370,7 +470,7 @@ def sync_github_playwright(args: argparse.Namespace) -> None:
                     continue
                 payload = archive.read(member)
                 content_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
-                s3_request("PUT", f"{target_prefix}/{safe_name}", payload, content_type=content_type)
+                put_bytes(f"{target_prefix}/{safe_name}", payload, content_type=content_type)
                 synced += 1
         if artifact_name == "playwright-report":
             metadata = {
@@ -423,7 +523,7 @@ def sync_github_backend(args: argparse.Namespace) -> None:
                 continue
             payload = archive.read(member)
             content_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
-            s3_request("PUT", f"{target_prefix}/{safe_name}", payload, content_type=content_type)
+            put_bytes(f"{target_prefix}/{safe_name}", payload, content_type=content_type)
             synced += 1
             if safe_name.endswith("results.xml"):
                 summary = parse_junit_summary_bytes(payload)
@@ -446,7 +546,7 @@ def sync_github_backend(args: argparse.Namespace) -> None:
         "report_path": f"/artifact/{results_key}",
         "synced_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    s3_request("PUT", f"{prefix}/runs/{run_id}/metadata.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
+    put_bytes(f"{prefix}/runs/{run_id}/metadata.json", json.dumps(metadata, indent=2).encode("utf-8"), content_type="application/json")
     upload_latest_marker(prefix, metadata)
     update_index(prefix, metadata)
     print(f"Synced {synced} GitHub backend artifact file(s) from run {run_id}.")
@@ -531,7 +631,12 @@ def serve(args: argparse.Namespace) -> None:
                     return
                 if self.path.startswith("/artifact/"):
                     key = urllib.parse.unquote(self.path.removeprefix("/artifact/").split("?", 1)[0])
-                    body = s3_request("GET", key)
+                    try:
+                        body = get_bytes(key)
+                    except (FileNotFoundError, IsADirectoryError, ValueError):
+                        self.send_response(404)
+                        self.end_headers()
+                        return
                     self.send_response(200)
                     self.send_header("Content-Type", mimetypes.guess_type(key)[0] or "application/octet-stream")
                     self.send_header("Content-Length", str(len(body)))
@@ -567,6 +672,9 @@ def main() -> None:
     upload_backend_parser.add_argument("--log", default="live-results/pytest.log")
     lifecycle_parser = subparsers.add_parser("apply-lifecycle")
     lifecycle_parser.add_argument("--days", default=30, type=int)
+    cleanup_parser = subparsers.add_parser("cleanup-filesystem")
+    cleanup_parser.add_argument("--days", default=30, type=int)
+    cleanup_parser.add_argument("--dry-run", action="store_true")
     serve_parser = subparsers.add_parser("serve")
     serve_parser.add_argument("--host", default="0.0.0.0")
     serve_parser.add_argument("--port", default=8080, type=int)
@@ -581,6 +689,8 @@ def main() -> None:
         upload_openshift_backend(args)
     elif args.command == "apply-lifecycle":
         apply_lifecycle(args.days)
+    elif args.command == "cleanup-filesystem":
+        cleanup_filesystem(args.days, args.dry_run)
     elif args.command == "serve":
         serve(args)
 

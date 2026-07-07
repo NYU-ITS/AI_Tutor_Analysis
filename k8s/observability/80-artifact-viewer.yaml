@@ -35,16 +35,16 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-          envFrom:
-            - secretRef:
-                name: ai-tutor-test-artifacts-bucket
-            - configMapRef:
-                name: ai-tutor-test-artifacts-bucket
           env:
+            - name: ARTIFACT_STORAGE_BACKEND
+              value: filesystem
+            - name: ARTIFACT_ROOT
+              value: /artifacts
             - name: ARTIFACT_PREFIXES
               value: OpenShift backend=openshift/backend/dev,OpenShift frontend=openshift/frontend/dev,GitHub backend=github/backend/feature-test-suite-expansion,GitHub frontend=github/frontend/rs-ai-tutor-tests
-            - name: BUCKET_TLS_VERIFY
-              value: "false"
+          volumeMounts:
+            - name: quality-artifacts
+              mountPath: /artifacts
           resources:
             requests:
               cpu: 50m
@@ -52,6 +52,10 @@ spec:
             limits:
               cpu: 250m
               memory: 256Mi
+      volumes:
+        - name: quality-artifacts
+          persistentVolumeClaim:
+            claimName: ai-tutor-quality-artifacts
 ---
 apiVersion: v1
 kind: Service

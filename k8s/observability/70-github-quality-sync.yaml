@@ -7,6 +7,10 @@ metadata:
     app.kubernetes.io/component: github-quality-sync
     app.kubernetes.io/part-of: ai-tutor-observability
 spec:
+  # Suspended until the GitHub read token has working access to Actions artifacts.
+  # Resume with:
+  #   oc patch cronjob ai-tutor-github-quality-sync -n rit-genai-naga-dev -p '{"spec":{"suspend":false}}'
+  suspend: true
   schedule: "*/10 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 0
@@ -30,11 +34,6 @@ spec:
             - name: github-quality-sync
               image: image-registry.openshift-image-registry.svc:5000/rit-genai-naga-dev/ai-tutor-quality-checks:latest
               imagePullPolicy: Always
-              envFrom:
-                - secretRef:
-                    name: ai-tutor-test-artifacts-bucket
-                - configMapRef:
-                    name: ai-tutor-test-artifacts-bucket
               command:
                 - /bin/sh
                 - -ec
@@ -60,14 +59,19 @@ spec:
                   value: github-actions
                 - name: QUALITY_PUSHGATEWAY_URL
                   value: http://ai-tutor-quality-pushgateway:9091
-                - name: BUCKET_TLS_VERIFY
-                  value: "false"
+                - name: ARTIFACT_STORAGE_BACKEND
+                  value: filesystem
+                - name: ARTIFACT_ROOT
+                  value: /artifacts
                 - name: GITHUB_TOKEN
                   valueFrom:
                     secretKeyRef:
                       name: ai-tutor-github-metrics-sync-secret
                       key: GITHUB_TOKEN
                       optional: false
+              volumeMounts:
+                - name: quality-artifacts
+                  mountPath: /artifacts
               resources:
                 requests:
                   cpu: 50m
@@ -75,3 +79,7 @@ spec:
                 limits:
                   cpu: 300m
                   memory: 384Mi
+          volumes:
+            - name: quality-artifacts
+              persistentVolumeClaim:
+                claimName: ai-tutor-quality-artifacts
