@@ -226,7 +226,7 @@ OpenShift backend artifact upload is automatic in the backend quality runner. It
 
 The log upload path redacts known secret environment values and common bearer token, password, API key, and database URL patterns before writing to artifact storage. Upload failures are best-effort and do not override the pytest exit status. When the `s3` backend is re-enabled in the future, artifact clients use `S3_REQUEST_TIMEOUT_SECONDS=10` by default so an unhealthy object-storage endpoint does not delay quality jobs for long.
 
-Build-triggered checks (BuildConfig `postCommit`) publish metrics only and set `QUALITY_UPLOAD_BACKEND_ARTIFACTS=0`, because build pods cannot mount PVCs. Artifacts come from the post-deploy Job, which mounts the PVC at `/artifacts`.
+Build-triggered checks (BuildConfig `postCommit`) publish metrics only and set `QUALITY_UPLOAD_BACKEND_ARTIFACTS=0`, because build pods cannot mount PVCs. That flag is baked into the image by the OpenShift Docker build, so the post-deploy Job explicitly overrides it back to `1` and mounts the PVC at `/artifacts`. Change the flag in both the BuildConfig and the Job.
 
 GitHub artifact sync is automatic through `ai-tutor-github-quality-sync`. To run an immediate manual sync, create a one-off Job from the CronJob:
 

@@ -202,7 +202,7 @@ Backend resource profile:
 - explicit Job request: `100m CPU`, `256Mi memory`
 - explicit Job limit: `500m CPU`, `512Mi memory`
 
-Backend OpenShift artifact outputs:
+Backend OpenShift artifact outputs (written to the artifact PVC, see [Artifact Storage](#artifact-storage)):
 
 - `openshift/backend/dev/runs/<run-id>/junit/results.xml`
 - `openshift/backend/dev/runs/<run-id>/raw/live-results.xml`
@@ -211,6 +211,8 @@ Backend OpenShift artifact outputs:
 - `openshift/backend/dev/index.json`
 
 The backend log artifact is sanitized before upload. The uploader replaces known secret environment values and common bearer token, API key, password, and database URL patterns with redaction markers. Artifact upload is best-effort and cannot turn a passing pytest run into a failed test run, but it logs the skip reason.
+
+> **Build-vs-Job gotcha.** The BuildConfig sets `QUALITY_UPLOAD_BACKEND_ARTIFACTS=0` (frontend: `QUALITY_UPLOAD_ARTIFACTS=0`) because build pods cannot mount the artifact PVC. As noted above, OpenShift Docker-strategy `env` is baked into the output image, so that `0` also reaches the post-deploy Job at runtime. The post-deploy Job therefore **explicitly overrides the flag back to `1`** (and mounts the PVC). If you add a new upload toggle, set it in both places or the Job will silently skip uploads while still passing.
 
 ## Frontend OpenShift Quality Checks
 
@@ -343,7 +345,7 @@ Dashboard expectations:
 - OpenShift panels identify deployed-environment failures separately from CI failures
 - the local dashboard is kept for local Docker/Grafana only and is not imported into shared OpenShift Grafana
 
-Heavy artifacts are stored in ObjectBucket/S3 instead of Prometheus:
+Heavy artifacts are stored on the artifact PVC instead of Prometheus (see [Artifact Storage](#artifact-storage)):
 
 - OpenShift backend artifacts: `openshift/backend/dev/runs/<run-id>/`
 - OpenShift backend latest marker: `openshift/backend/dev/latest.json`
@@ -354,7 +356,19 @@ Heavy artifacts are stored in ObjectBucket/S3 instead of Prometheus:
 - GitHub backend artifacts: `github/backend/<branch>/runs/<run-id>/`
 - GitHub frontend artifacts: `github/frontend/<branch>/runs/<run-id>/`
 
-The deployed artifact viewer exposes the latest report plus recent runs. Prometheus keeps numeric history for 30 days via `--storage.tsdb.retention.time=30d`; ObjectBucket/S3 keeps heavy artifact history for 30 days via the bucket lifecycle policy.
+The deployed artifact viewer exposes the latest report plus recent runs. Prometheus keeps numeric history for 30 days via `--storage.tsdb.retention.time=30d`; the artifact PVC keeps heavy artifact history for 30 days via the daily cleanup CronJob.
+
+## Artifact Storage
+
+Heavy test artifacts (JUnit/raw XML, redacted logs, Playwright reports/videos/traces, synced GitHub artifacts) live on a dedicated `ReadWriteMany` PVC, `ai-tutor-quality-artifacts` (`vastdata-cloud`, `20Gi`), mounted at `/artifacts` in the backend Job, frontend Job, artifact viewer, GitHub sync CronJob, and cleanup CronJob. This replaced a NooBaa ObjectBucketClaim whose S3 endpoint accepted TCP/TLS but never returned HTTP responses (retired 2026-07-07).
+
+The artifact tooling is storage-backend-neutral:
+
+- `AI_Tutor_Analysis/scripts/quality_artifact_store.py` and `NAGA-open-webui/scripts/upload_openshift_playwright_artifacts.py` select a backend via `ARTIFACT_STORAGE_BACKEND` (`filesystem` today, `s3` retained for a future object-storage migration) and a root via `ARTIFACT_ROOT` (`/artifacts`).
+- Logical artifact paths and the viewer's `/artifact/...` URLs are identical across backends, so Grafana links and dashboards do not change if storage moves back to S3.
+- Retention is enforced by the daily `ai-tutor-quality-artifact-cleanup` CronJob (`k8s/observability/02-artifact-cleanup-cronjob.yaml`), which deletes files older than 30 days strictly under `/artifacts` and prunes `index.json`/`latest.json` entries for removed runs. The former S3 bucket lifecycle rule is retired.
+
+Manifests: `k8s/observability/01-artifact-pvc.yaml` (PVC), `02-artifact-cleanup-cronjob.yaml` (retention), `80-artifact-viewer.yaml` (viewer). The deprecated OBC in `00-artifact-bucket.yaml` is kept unreferenced for a possible future S3 restoration.
 
 ## Operational Commands
 
@@ -365,14 +379,15 @@ cd AI_Tutor_Analysis
 oc apply -f k8s/quality-checks/buildconfig.yaml -n rit-genai-naga-dev
 ```
 
-ObjectBucket lifecycle enforcement:
+Artifact storage (PVC) and retention:
 
 ```bash
 cd AI_Tutor_Analysis
-oc apply -f k8s/observability/00-artifact-bucket.yaml -n rit-genai-naga-dev
-oc delete job ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev --ignore-not-found
-oc apply -f k8s/observability/01-artifact-bucket-lifecycle-job.yaml -n rit-genai-naga-dev
-oc logs job/ai-tutor-test-artifacts-lifecycle -n rit-genai-naga-dev -f
+oc apply -f k8s/observability/01-artifact-pvc.yaml -n rit-genai-naga-dev
+oc apply -f k8s/observability/02-artifact-cleanup-cronjob.yaml -n rit-genai-naga-dev
+# dry-run the retention pass from the viewer pod (same image + PVC mount) before the real thing:
+oc exec deploy/ai-tutor-quality-artifact-viewer -n rit-genai-naga-dev -- \
+  python scripts/quality_artifact_store.py cleanup-filesystem --days 30 --dry-run
 ```
 
 GitHub metrics and artifact sync:
@@ -430,7 +445,7 @@ oc get pods -n rit-genai-naga-dev | grep quality
 The implementation is intentionally event-driven and short-lived:
 
 - no always-running test pods
-- no CronJobs for these quality checks
+- the only CronJobs are lightweight housekeeping: `ai-tutor-quality-artifact-cleanup` (daily retention) and `ai-tutor-github-quality-sync` (suspended until GitHub token access is confirmed); the quality checks themselves run as one-shot Jobs
 - limited build history with `successfulBuildsHistoryLimit: 2` and `failedBuildsHistoryLimit: 2`
 - completed explicit Jobs use `ttlSecondsAfterFinished: 3600`
 - Playwright runs one worker in OpenShift and records video for passing and failing browser checks

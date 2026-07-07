@@ -242,7 +242,7 @@ The log uploader redacts known secret environment values and common bearer token
 Artifact storage wiring:
 
 - The explicit Job mounts the `ai-tutor-quality-artifacts` PVC at `/artifacts` and sets `ARTIFACT_STORAGE_BACKEND=filesystem` plus `ARTIFACT_ROOT=/artifacts`. The PVC is created by `k8s/observability/01-artifact-pvc.yaml`; retention is a daily cleanup CronJob (`k8s/observability/02-artifact-cleanup-cronjob.yaml`, 30 days).
-- Build-triggered checks (BuildConfig `postCommit`) set `QUALITY_UPLOAD_BACKEND_ARTIFACTS=0` because build pods cannot mount PVCs; they publish metrics only.
+- Build-triggered checks (BuildConfig `postCommit`) set `QUALITY_UPLOAD_BACKEND_ARTIFACTS=0` because build pods cannot mount PVCs; they publish metrics only. That value is baked into the image (OpenShift Docker-strategy env), so the post-deploy Job explicitly overrides it back to `1`. Change the flag in both places. See the build-vs-Job gotcha in `AI_TUTOR_TESTING_OBSERVABILITY.md`.
 - The previous ObjectBucket/S3 wiring (`ai-tutor-test-artifacts-bucket` Secret/ConfigMap, `BUCKET_*` variables, `S3_REQUEST_TIMEOUT_SECONDS`) is retired but the `s3` code path remains behind `ARTIFACT_STORAGE_BACKEND=s3` for a future object-storage migration.
 
 ## Troubleshooting
